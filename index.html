@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Arduino USB Control</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
+        .card { background: #1e1e1e; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin-bottom: 20px; }
+        .val-box { font-size: 3rem; color: #00e676; margin: 10px 0; }
+        button { 
+            background: #007bff; border: none; color: white; padding: 15px 30px; 
+            border-radius: 10px; font-size: 1.1rem; cursor: pointer; transition: 0.3s; width: 100%; max-width: 300px; margin: 10px 0;
+        }
+        button:active { transform: scale(0.98); opacity: 0.8; }
+        .btn-off { background: #f44336; }
+        #status { font-size: 0.8rem; color: #888; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Монитор датчика</h2>
+        <div id="val" class="val-box">0</div>
+        <p id="status">Статус: Отключено</p>
+        <button id="connectBtn">Подключить Arduino</button>
+    </div>
+
+    <div class="card">
+        <h2>Управление LED</h2>
+        <button onclick="send('1')">ВКЛЮЧИТЬ</button>
+        <button class="btn-off" onclick="send('0')">ВЫКЛЮЧИТЬ</button>
+    </div>
+
+    <script>
+        let port;
+        let reader;
+        let inputDone;
+        let inputStream;
+
+        // Регистрация Service Worker для PWA
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js');
+        }
+
+        async function connect() {
+            try {
+                port = await navigator.serial.requestPort();
+                await port.open({ baudRate: 9600 });
+                
+                document.getElementById('status').innerText = "Статус: Подключено";
+                document.getElementById('connectBtn').style.display = "none";
+
+                while (port.readable) {
+                    const reader = port.readable.getReader();
+                    try {
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) break;
+                            const text = new TextDecoder().decode(value);
+                            // Обновляем значение датчика
+                            if (text.trim()) {
+                                document.getElementById('val').innerText = text.trim();
+                            }
+                        }
+                    } finally {
+                        reader.releaseLock();
+                    }
+                }
+            } catch (err) {
+                console.error("Ошибка:", err);
+                alert("Ошибка подключения. Проверьте флаги в chrome://flags");
+            }
+        }
+
+        async function send(data) {
+            if (port && port.writable) {
+                const writer = port.writable.getWriter();
+                await writer.write(new TextEncoder().encode(data));
+                writer.releaseLock();
+            }
+        }
+
+        document.getElementById('connectBtn').addEventListener('click', connect);
+    </script>
+</body>
+</html>
