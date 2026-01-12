@@ -176,41 +176,13 @@
             initBalancePad();
         });
 
-        document.getElementById('connectBtn').addEventListener('click', async () => {
-    try {
-        // 1. Запрашиваем порт. 
-        // Если оставить скобки пустыми {}, браузер покажет список всех USB-устройств.
-        port = await navigator.serial.requestPort(); 
-        
-        // 2. Открываем порт. 
-        // ВАЖНО: baudRate должен быть 115200, как мы договорились для ESP32
-        await port.open({ baudRate: 115200 }); 
-        
-        // 3. Настраиваем инструменты записи и чтения
-        writer = port.writable.getWriter();
-        const status = document.getElementById('status');
-        status.innerText = "Подключено";
-        status.classList.add('ok');
-        
-        // Прячем кнопку после успешного подключения
-        document.getElementById('connectBtn').style.display = 'none';
-
-        // 4. Запускаем бесконечный цикл прослушивания порта
-        readLoop();
-        
-        // 5. Запрашиваем текущие настройки из памяти ESP32 (DUMP)
-        // Задержка нужна, чтобы порт успел "проснуться"
-        setTimeout(() => sendRaw("DUMP"), 600);
-
-            } catch (e) {
-        console.error("Ошибка при выборе порта:", e);
-        if (e.name === 'NotFoundError') {
-            alert("Вы не выбрали устройство.");
-            } else {
-            alert("Ошибка доступа: " + e.message + "\nУбедитесь, что другие приложения (терминалы) закрыты.");
-                }
-            }
-           });
+        // Старый код, который мы ищем:
+document.getElementById('connectBtn').addEventListener('click', async () => {
+    if (!port) {
+        port = await navigator.serial.requestPort();
+    }
+    connectToPort();
+});
 
         async function connectToPort() {
             try {
