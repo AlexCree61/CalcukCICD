@@ -178,7 +178,22 @@
 
         document.getElementById('connectBtn').addEventListener('click', async () => {
             if (!port) {
-                port = await navigator.serial.requestPort({ filters: [] });
+                // Список частых идентификаторов для Arduino (Оригинал, CH340, CP2102, FTDI)
+                const filters = [
+                    { usbVendorId: 0x2341 }, // Arduino Original
+                    { usbVendorId: 0x1a86 }, // CH340 (Китайские клоны - самый частый вариант)
+                    { usbVendorId: 0x10c4 }, // CP2102
+                    { usbVendorId: 0x0403 }  // FTDI
+                ];
+
+// Пытаемся найти устройство с фильтрами, если не выйдет - ищем всё подряд
+try {
+    port = await navigator.serial.requestPort({ filters: filters });
+} catch (e) {
+    // Если фильтры не сработали, пробуем без них (показать всё)
+    console.log("Фильтры не сработали, пробуем показать всё...");
+    port = await navigator.serial.requestPort(); 
+}
             }
             connectToPort();
         });
