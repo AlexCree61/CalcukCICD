@@ -178,7 +178,7 @@
 
         document.getElementById('connectBtn').addEventListener('click', async () => {
             if (!port) {
-                port = await navigator.serial.requestPort();
+                port = await navigator.serial.requestPort({ filters: [] });
             }
             connectToPort();
         });
