@@ -1,88 +1,385 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Arduino USB Control</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>TDA7416 Control</title>
     <link rel="manifest" href="manifest.json">
     <style>
-        body { font-family: 'Segoe UI', sans-serif; text-align: center; background: #121212; color: white; padding: 20px; }
-        .card { background: #1e1e1e; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); margin-bottom: 20px; }
-        .val-box { font-size: 3rem; color: #00e676; margin: 10px 0; }
-        button { 
-            background: #007bff; border: none; color: white; padding: 15px 30px; 
-            border-radius: 10px; font-size: 1.1rem; cursor: pointer; transition: 0.3s; width: 100%; max-width: 300px; margin: 10px 0;
-        }
-        button:active { transform: scale(0.98); opacity: 0.8; }
-        .btn-off { background: #f44336; }
-        #status { font-size: 0.8rem; color: #888; }
+        :root { --bg: #121212; --card: #1e1e1e; --accent: #007bff; --text: #fff; --text-sec: #888; }
+        body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; user-select: none; }
+        
+        /* Header & Tabs */
+        .header { padding: 15px; background: #1a1a1a; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; }
+        .status { font-size: 0.8rem; color: #f44336; }
+        .status.ok { color: #00e676; }
+        
+        .tabs { display: flex; overflow-x: auto; background: #252525; }
+        .tab-btn { flex: 1; padding: 15px; background: none; border: none; color: #aaa; font-size: 1rem; cursor: pointer; border-bottom: 2px solid transparent; min-width: 80px; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: bold; }
+        
+        .content { display: none; padding: 20px; padding-bottom: 80px; }
+        .content.active { display: block; }
+
+        /* UI Elements */
+        .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        h3 { margin-top: 0; font-size: 1.1rem; color: #ddd; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        label { display: block; margin-bottom: 5px; color: var(--text-sec); font-size: 0.9rem; }
+        
+        /* Sliders */
+        input[type=range] { width: 100%; height: 6px; background: #444; border-radius: 5px; outline: none; -webkit-appearance: none; margin: 15px 0; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+        
+        /* Switches & Buttons */
+        .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        select { background: #333; color: white; border: none; padding: 8px; border-radius: 5px; width: 100%; font-size: 1rem; }
+        .btn-toggle { background: #333; color: #aaa; padding: 10px 20px; border-radius: 20px; border: 1px solid #444; cursor: pointer; flex: 1; margin: 0 5px; }
+        .btn-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
+        
+        /* EQ Layout */
+        .eq-scroll { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
+        .eq-band { min-width: 60px; text-align: center; background: #252525; padding: 10px; border-radius: 8px; }
+        .eq-slider-vert { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 30px; height: 150px; }
+
+        /* Balance Canvas */
+        #balCanvas { background: #2b2b2b; border-radius: 10px; margin: 0 auto; display: block; touch-action: none; border: 2px solid #444; }
+
+        /* Main Button */
+        #connectBtn { background: var(--accent); color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <div class="card">
-        <h2>Монитор датчика</h2>
-        <div id="val" class="val-box">0</div>
-        <p id="status">Статус: Отключено</p>
-        <button id="connectBtn">Подключить Arduino</button>
+    <div class="header">
+        <div id="status" class="status">Disconnected</div>
+        <button id="connectBtn">Connect</button>
     </div>
 
-    <div class="card">
-        <h2>Управление LED</h2>
-        <button onclick="send('1')">ВКЛЮЧИТЬ</button>
-        <button class="btn-off" onclick="send('0')">ВЫКЛЮЧИТЬ</button>
+    <div class="tabs">
+        <button class="tab-btn active" onclick="openTab('main')">Main</button>
+        <button class="tab-btn" onclick="openTab('eq')">EQ</button>
+        <button class="tab-btn" onclick="openTab('bal')">Balance</button>
+        <button class="tab-btn" onclick="openTab('adv')">Advanced</button>
+    </div>
+
+    <div id="main" class="content active">
+        <div class="card">
+            <h3>Master Volume</h3>
+            <h2 id="volVal" style="text-align: center; color: var(--accent);">-20</h2>
+            <input type="range" min="-79" max="15" value="-20" oninput="send('voll', this.value); document.getElementById('volVal').innerText = this.value">
+        </div>
+
+        <div class="card">
+            <h3>Input Source</h3>
+            <div style="display: flex;">
+                <button id="btnSrcBT" class="btn-toggle active" onclick="setInput('Bluetooth')">Bluetooth</button>
+                <button id="btnSrcUSB" class="btn-toggle" onclick="setInput('USB')">USB</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>Preamp Gain</h3>
+            <input type="range" min="0" max="15" value="10" oninput="send('pre', this.value)">
+        </div>
+
+        <div class="card">
+            <div class="row">
+                <h3>Mute</h3>
+                <label class="switch">
+                    <input type="checkbox" id="muteSw" onchange="send('mute', this.checked ? 0 : 1)" checked>
+                    <span>Sound ON</span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <div id="eq" class="content">
+        <div class="eq-scroll" id="eqContainer">
+            </div>
+
+        <div class="card">
+            <h3>Subwoofer Config</h3>
+            <div class="row">
+                <label>Freq</label>
+                <select onchange="send('s_fr', this.value)" id="subFr">
+                    <option value="0">Off</option><option value="1">90Hz</option>
+                    <option value="2">135Hz</option><option value="3">180Hz</option><option value="4">225Hz</option>
+                </select>
+            </div>
+            <div class="row">
+                <label>Q-Factor</label>
+                <select onchange="send('s_q', this.value)" id="subQ">
+                    <option value="0">3.5</option><option value="1">1.8</option>
+                </select>
+            </div>
+            <div class="row">
+                <label>HP Filter</label>
+                <input type="checkbox" id="subHp" onchange="send('s_hp', this.checked?1:0)">
+            </div>
+        </div>
+    </div>
+
+    <div id="bal" class="content">
+        <div class="card">
+            <h3>Subwoofer Gain</h3>
+            <input type="range" min="-79" max="15" value="0" oninput="send('s_att', this.value)">
+        </div>
+        <div class="card" style="text-align: center;">
+            <h3>Fader / Balance</h3>
+            <canvas id="balCanvas" width="300" height="300"></canvas>
+            <p style="font-size: 0.8rem; margin-top: 5px;">Drag to adjust</p>
+        </div>
+    </div>
+
+    <div id="adv" class="content">
+        <div class="card">
+            <h3>Loudness</h3>
+            <div class="row">
+                <label>Enable</label>
+                <input type="checkbox" id="lByp" onchange="send('l_byp', this.checked?1:0)">
+            </div>
+            <label>Attenuation</label>
+            <input type="range" min="0" max="15" value="0" oninput="send('l_att', this.value)">
+            <label>Center Freq</label>
+            <select onchange="send('l_cen', this.value)" id="lCen">
+                <option value="0">200Hz</option><option value="1">400Hz</option>
+                <option value="2">600Hz</option><option value="3">800Hz</option>
+            </select>
+        </div>
+        <div class="card">
+            <div class="row">
+                <label>Front Coupling</label>
+                <input type="checkbox" id="fCoup" onchange="send('f_coup', this.checked?1:0)">
+            </div>
+            <div class="row">
+                <label>Rear Effect</label>
+                <input type="checkbox" id="rEff" onchange="send('r_eff', this.checked?1:0)">
+            </div>
+        </div>
     </div>
 
     <script>
-        let port;
-        let reader;
-        let inputDone;
-        let inputStream;
+        // --- LOGIC ---
+        let port, writer, reader;
+        let isSyncing = false;
 
-        // Регистрация Service Worker для PWA
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('sw.js');
-        }
-
-        async function connect() {
-            try {
-                port = await navigator.serial.requestPort();
-                await port.open({ baudRate: 9600 });
-                
-                document.getElementById('status').innerText = "Статус: Подключено";
-                document.getElementById('connectBtn').style.display = "none";
-
-                while (port.readable) {
-                    const reader = port.readable.getReader();
-                    try {
-                        while (true) {
-                            const { value, done } = await reader.read();
-                            if (done) break;
-                            const text = new TextDecoder().decode(value);
-                            // Обновляем значение датчика
-                            if (text.trim()) {
-                                document.getElementById('val').innerText = text.trim();
-                            }
-                        }
-                    } finally {
-                        reader.releaseLock();
-                    }
+        // Auto Connect on Load
+        window.addEventListener('load', async () => {
+            if ("serial" in navigator) {
+                const ports = await navigator.serial.getPorts();
+                if (ports.length > 0) {
+                    port = ports[0];
+                    connectToPort();
                 }
-            } catch (err) {
-                console.error("Ошибка:", err);
-                alert("Ошибка подключения. Проверьте флаги в chrome://flags");
+            }
+            generateEQ();
+            initBalancePad();
+        });
+
+        document.getElementById('connectBtn').addEventListener('click', async () => {
+            if (!port) {
+                port = await navigator.serial.requestPort();
+            }
+            connectToPort();
+        });
+
+        async function connectToPort() {
+            try {
+                await port.open({ baudRate: 9600 });
+                const status = document.getElementById('status');
+                status.innerText = "Connected";
+                status.classList.add('ok');
+                document.getElementById('connectBtn').style.display = 'none';
+
+                writer = port.writable.getWriter();
+                setTimeout(() => sendRaw("DUMP"), 1500); // Sync after delay
+                readLoop();
+            } catch (e) {
+                console.error(e);
+                alert("Connection Failed. Check chrome://flags");
             }
         }
 
-        async function send(data) {
-            if (port && port.writable) {
-                const writer = port.writable.getWriter();
-                await writer.write(new TextEncoder().encode(data));
-                writer.releaseLock();
+        async function readLoop() {
+            while (port.readable) {
+                reader = port.readable.getReader();
+                try {
+                    while (true) {
+                        const { value, done } = await reader.read();
+                        if (done) break;
+                        const text = new TextDecoder().decode(value);
+                        processIncoming(text);
+                    }
+                } finally {
+                    reader.releaseLock();
+                }
             }
         }
 
-        document.getElementById('connectBtn').addEventListener('click', connect);
+        // Buffer for incoming serial data (handling fragmented packets)
+        let serialBuffer = "";
+        function processIncoming(text) {
+            serialBuffer += text;
+            if (serialBuffer.includes('\n')) {
+                const lines = serialBuffer.split('\n');
+                serialBuffer = lines.pop(); // Keep incomplete part
+                for (const line of lines) {
+                    if (line.startsWith("STATE:")) parseState(line);
+                }
+            }
+        }
+
+        function parseState(line) {
+            isSyncing = true;
+            try {
+                const raw = line.replace("STATE:", "").replace(",END", "").trim();
+                const d = raw.split(",").map(Number);
+                
+                // Map data to UI (Similar to Python Logic)
+                document.getElementById('volVal').innerText = d[0];
+                document.querySelector('input[oninput*="voll"]').value = d[0];
+                
+                setInput(d[1] === 2 ? 'Bluetooth' : 'USB', false);
+                document.querySelector('input[oninput*="pre"]').value = d[2];
+                document.getElementById('muteSw').checked = (d[3] === 0);
+
+                // EQ Gains (d[4]...d[10])
+                for(let i=0; i<7; i++) {
+                    document.getElementById(`eqg${i}`).value = d[4+i];
+                }
+                
+                // Sub Config
+                document.getElementById('subFr').value = d[21];
+                document.getElementById('subQ').value = d[22];
+                document.getElementById('subHp').checked = d[23] === 1;
+
+                // Balance Pad (Calculate reverse position if possible, or just center)
+                // For simplicity, we just sync sliders, canvas visual is tricky to reverse-calc perfectly without stored X/Y
+
+                console.log("Synced!");
+            } catch(e) { console.error("Sync Error", e); }
+            isSyncing = false;
+        }
+
+        async function send(key, val) {
+            if (isSyncing) return;
+            const cmd = `${key}:${Math.floor(val)}`;
+            console.log("TX:", cmd);
+            sendRaw(cmd);
+        }
+
+        async function sendRaw(text) {
+            if (writer) {
+                await writer.write(new TextEncoder().encode(text + "\n"));
+            }
+        }
+
+        // --- UI HELPERS ---
+        function openTab(id) {
+            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+            event.target.classList.add('active');
+        }
+
+        function setInput(type, transmit=true) {
+            document.getElementById('btnSrcBT').className = `btn-toggle ${type==='Bluetooth'?'active':''}`;
+            document.getElementById('btnSrcUSB').className = `btn-toggle ${type==='USB'?'active':''}`;
+            if (transmit) send('ins', type === 'Bluetooth' ? 2 : 0);
+        }
+
+        function generateEQ() {
+            const bands = ["Band 1", "Band 2", "Band 3", "Band 4", "Band 5", "Band 6", "Band 7"];
+            const container = document.getElementById('eqContainer');
+            bands.forEach((name, i) => {
+                const div = document.createElement('div');
+                div.className = 'eq-band';
+                div.innerHTML = `
+                    <div style="font-size:0.7rem; margin-bottom:5px;">${name}</div>
+                    <input type="range" class="eq-slider-vert" id="eqg${i}" min="-15" max="15" value="0" 
+                        oninput="send('eqg${i}', this.value)">
+                    <select onchange="send('eqq${i}', this.value)" style="width:100%; margin-top:5px; font-size:0.7rem;">
+                        <option value="0">Q:2.2</option><option value="1">Q:1.8</option>
+                        <option value="2">Q:1.4</option><option value="3">Q:1.0</option>
+                    </select>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        // --- BALANCE PAD LOGIC (Canvas) ---
+        function initBalancePad() {
+            const canvas = document.getElementById('balCanvas');
+            const ctx = canvas.getContext('2d');
+            let w = canvas.width, h = canvas.height;
+            let cx = w/2, cy = h/2;
+            let puckX = cx, puckY = cy;
+
+            function draw() {
+                ctx.clearRect(0, 0, w, h);
+                // Grid
+                ctx.strokeStyle = '#555';
+                ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+                // Labels
+                ctx.fillStyle = '#888'; ctx.font = "12px Arial";
+                ctx.fillText("FRONT", cx-20, 15); ctx.fillText("REAR", cx-18, h-5);
+                ctx.fillText("L", 5, cy+5); ctx.fillText("R", w-15, cy+5);
+                // Puck
+                ctx.beginPath(); ctx.arc(puckX, puckY, 15, 0, Math.PI*2);
+                ctx.fillStyle = '#007bff'; ctx.fill(); ctx.stroke();
+            }
+
+            function updatePos(evt) {
+                const rect = canvas.getBoundingClientRect();
+                const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+                
+                let x = clientX - rect.left;
+                let y = clientY - rect.top;
+                
+                // Clamp
+                x = Math.max(0, Math.min(x, w));
+                y = Math.max(0, Math.min(y, h));
+                
+                puckX = x; puckY = y;
+                draw();
+                calcAndSend(x, y);
+            }
+
+            function calcAndSend(x, y) {
+                // Normalize -1 to 1
+                let nx = (x - cx) / cx;
+                let ny = (y - cy) / cy;
+
+                let att_l = nx < 0 ? Math.abs(nx) * 79 : 0;
+                let att_r = nx > 0 ? nx * 79 : 0;
+                let att_f = ny < 0 ? Math.abs(ny) * 79 : 0;
+                let att_rr = ny > 0 ? ny * 79 : 0;
+
+                // Send 4 commands efficiently
+                // Debounce could be added here for performance
+                send('bal_lf', Math.min(79, att_l + att_f)); // Python logic was confusing, simplifying to additive
+                send('bal_rf', Math.min(79, att_r + att_f));
+                send('bal_lr', Math.min(79, att_l + att_rr));
+                send('bal_rr', Math.min(79, att_r + att_rr));
+            }
+
+            canvas.addEventListener('mousedown', (e) => {
+                updatePos(e);
+                canvas.addEventListener('mousemove', updatePos);
+            });
+            window.addEventListener('mouseup', () => canvas.removeEventListener('mousemove', updatePos));
+            
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault(); // Stop scroll
+                updatePos(e);
+                canvas.addEventListener('touchmove', updatePos);
+            }, {passive: false});
+            window.addEventListener('touchend', () => canvas.removeEventListener('touchmove', updatePos));
+
+            draw();
+        }
     </script>
 </body>
 </html>
