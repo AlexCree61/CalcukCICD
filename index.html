@@ -199,22 +199,23 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
     }
 });
 
-        async function connectToPort() {
-            try {
-                await port.open({ baudRate: 9600 });
-                const status = document.getElementById('status');
-                status.innerText = "Connected";
-                status.classList.add('ok');
-                document.getElementById('connectBtn').style.display = 'none';
+       async function connectToPort() {
+    try {
+        await port.open({ baudRate: 9600 });
+        const status = document.getElementById('status');
+        status.innerText = "Connected";
+        status.classList.add('ok');
+        document.getElementById('connectBtn').style.display = 'none';
 
-                writer = port.writable.getWriter();
-                setTimeout(() => sendRaw("DUMP"), 1500); // Sync after delay
-                readLoop();
-            } catch (e) {
-                console.error(e);
-                alert("Connection Failed. Check chrome://flags");
-            }
-        }
+        writer = port.writable.getWriter();
+        setTimeout(() => sendRaw("DUMP"), 1500);
+        readLoop();
+    } catch (e) {
+        console.error(e);
+        // Выводим реальную ошибку, чтобы понять, что не так
+        alert("Error: " + e.message); 
+    }
+}
 
         async function readLoop() {
             while (port.readable) {
