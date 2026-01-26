@@ -115,21 +115,36 @@
         }
 
         async open() {
-            await this.device.open();
-            if (this.device.configuration === null) await this.device.selectConfiguration(1);
+    await this.device.open();
+    if (this.device.configuration === null) await this.device.selectConfiguration(1);
 
-            // Ищем подходящий интерфейс
-            const iface = this.device.configuration.interfaces.find(i => 
-                i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
-            ) || this.device.configuration.interfaces[0];
+    const iface = this.device.configuration.interfaces.find(i => 
+        i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
+    ) || this.device.configuration.interfaces[0];
 
-            this.interface = iface.interfaceNumber;
-            await this.device.claimInterface(this.interface);
+    this.interface = iface.interfaceNumber;
+    await this.device.claimInterface(this.interface);
 
-            const endpoints = iface.alternates[0].endpoints;
-            this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
-            this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
+    const endpoints = iface.alternates[0].endpoints;
+    this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
+    this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
 
+    // --- ДОБАВЛЕНО: Инициализация для CP2102 / CH340 ---
+    try {
+        // Устанавливаем Baud Rate 9600 (специфично для многих USB чипов)
+        await this.device.controlTransferOut({
+            requestType: 'vendor', recipient: 'device',
+            request: 0x1E, value: 0x00, index: 0x00 // Сброс порта
+        });
+        
+        // Включаем DTR и RTS (высокий уровень), чтобы ESP32 вышла из режима сброса
+        await this.device.controlTransferOut({
+            requestType: 'vendor', recipient: 'device',
+            request: 0x07, value: 0x0303, index: this.interface
+        });
+    } catch (e) {
+        console.log("Вендорная инициализация не поддерживается, пропускаем...");
+    }
             this.readable = {
                 getReader: () => ({
                     read: async () => {
@@ -224,12 +239,19 @@
     }
 
     async function sendRaw(text) {
-        if (writer) {
-            try {
-                await writer.write(new TextEncoder().encode(text + "\n"));
-            } catch(e) {}
+    if (writer) {
+        try {
+            // Добавляем \r\n для надежности
+            const data = new TextEncoder().encode(text + "\r\n");
+            await writer.write(data);
+            console.log("Отправлено:", text);
+        } catch(e) {
+            console.error("Ошибка отправки:", e);
         }
+    } else {
+        console.warn("Writer не готов!");
     }
+}
 
     // UI
     function openTab(id) {
