@@ -117,67 +117,74 @@
         }
 
         async open() {
-            await this.device.open();
-            if (this.device.configuration === null) await this.device.selectConfiguration(1);
+    await this.device.open();
+    if (this.device.configuration === null) await this.device.selectConfiguration(1);
 
-            const iface = this.device.configuration.interfaces.find(i => 
-                i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
-            ) || this.device.configuration.interfaces[0];
+    const iface = this.device.configuration.interfaces.find(i => 
+        i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
+    ) || this.device.configuration.interfaces[0];
 
-            this.interface = iface.interfaceNumber;
-            await this.device.claimInterface(this.interface);
+    this.interface = iface.interfaceNumber;
+    await this.device.claimInterface(this.interface);
 
-            const endpoints = iface.alternates[0].endpoints;
-            this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
-            this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
+    const endpoints = iface.alternates[0].endpoints;
+    this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
+    this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
 
-            // --- НАСТРОЙКА СКОРОСТИ (BAUD RATE) ---
-            log("Настройка скорости 115200...");
-            try {
-                // Команда для чипов CP2102 / CP2104 (часто на ESP32)
-                await this.device.controlTransferOut({
-                    requestType: 'vendor', recipient: 'device',
-                    request: 0x1E, value: 0x00, index: 0x00 // Сброс
-                });
-                
-                // Установка 115200 baud
-                // Для CP210x это делается так:
-                await this.device.controlTransferOut({
-                    requestType: 'vendor', recipient: 'device',
-                    request: 0x01, value: 0x00, index: 0x0010 // 0x0010 = 115200 для некоторых чипов
-                });
+    // --- СПЕЦИФИЧНАЯ НАСТРОЙКА CP2102 (115200) ---
+    log("Настройка CP2102: 115200...");
+    try {
+        // 1. Команда "IFC_ENABLE" (Включаем передачу данных)
+        await this.device.controlTransferOut({
+            requestType: 'vendor', recipient: 'interface',
+            request: 0x00, value: 0x0001, index: this.interface
+        });
 
-                // Включаем DTR/RTS (чтобы ESP32 вышла из Reset)
-                await this.device.controlTransferOut({
-                    requestType: 'vendor', recipient: 'device',
-                    request: 0x07, value: 0x0303, index: this.interface
-                });
-                
-                log("Скорость установлена!");
-            } catch (e) {
-                log("Ошибка настройки скорости: " + e.message);
-            }
+        // 2. Установка скорости 115200
+        // Для CP2102 это делается отправкой значения скорости в поле Data
+        const baudRate = 115200;
+        const data = new Uint8Array([
+            baudRate & 0xff,
+            (baudRate >> 8) & 0xff,
+            (baudRate >> 16) & 0xff,
+            (baudRate >> 24) & 0xff
+        ]);
 
-            // Настройка потоков (оставляем как было)
-            this.readable = {
-                getReader: () => ({
-                    read: async () => {
-                        const result = await this.device.transferIn(this.epIn, 64);
-                        return { value: new Uint8Array(result.data.buffer), done: false };
-                    },
-                    releaseLock: () => {}
-                })
-            };
+        await this.device.controlTransferOut({
+            requestType: 'vendor', recipient: 'interface',
+            request: 0x1E, value: 0x0000, index: this.interface
+        }, data);
 
-            this.writable = {
-                getWriter: () => ({
-                    write: async (data) => {
-                        await this.device.transferOut(this.epOut, data);
-                    },
-                    releaseLock: () => {}
-                })
-            };
-        }
+        // 3. Установка DTR и RTS в HIGH (чтобы ESP32 вышла из сброса)
+        await this.device.controlTransferOut({
+            requestType: 'vendor', recipient: 'interface',
+            request: 0x07, value: 0x0303, index: this.interface
+        });
+
+        log("CP2102 готов к работе!");
+    } catch (e) {
+        log("Ошибка CP2102: " + e.message);
+    }
+
+    this.readable = {
+        getReader: () => ({
+            read: async () => {
+                const result = await this.device.transferIn(this.epIn, 64);
+                return { value: new Uint8Array(result.data.buffer), done: false };
+            },
+            releaseLock: () => {}
+        })
+    };
+
+    this.writable = {
+        getWriter: () => ({
+            write: async (data) => {
+                await this.device.transferOut(this.epOut, data);
+            },
+            releaseLock: () => {}
+        })
+    };
+}
     }
 
     let port, writer;
