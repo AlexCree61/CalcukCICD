@@ -99,13 +99,15 @@
     </div>
 
     <script>
-    // --- ПРОВЕРКА ОШИБОК ---
-    window.onerror = function(msg, url, line) {
-        alert("Критическая ошибка: " + msg + "\nСтрока: " + line);
-        return false;
-    };
+    // Функция для вывода логов на экран
+    function log(msg) {
+        const div = document.getElementById('debugLog');
+        if(div) {
+            div.innerHTML += "<div>" + msg + "</div>";
+            div.scrollTop = div.scrollHeight;
+        }
+    }
 
-    // --- ПОЛИФИЛ USB-SERIAL ---
     class USBSerialDevice {
         constructor(device) {
             this.device = device;
@@ -115,36 +117,39 @@
         }
 
         async open() {
-    await this.device.open();
-    if (this.device.configuration === null) await this.device.selectConfiguration(1);
+            await this.device.open();
+            if (this.device.configuration === null) await this.device.selectConfiguration(1);
 
-    const iface = this.device.configuration.interfaces.find(i => 
-        i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
-    ) || this.device.configuration.interfaces[0];
+            // Ищем интерфейс с данными
+            const iface = this.device.configuration.interfaces.find(i => 
+                i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
+            ) || this.device.configuration.interfaces[0];
 
-    this.interface = iface.interfaceNumber;
-    await this.device.claimInterface(this.interface);
+            this.interface = iface.interfaceNumber;
+            await this.device.claimInterface(this.interface);
 
-    const endpoints = iface.alternates[0].endpoints;
-    this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
-    this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
+            const endpoints = iface.alternates[0].endpoints;
+            this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
+            this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
 
-    // --- ДОБАВЛЕНО: Инициализация для CP2102 / CH340 ---
-    try {
-        // Устанавливаем Baud Rate 9600 (специфично для многих USB чипов)
-        await this.device.controlTransferOut({
-            requestType: 'vendor', recipient: 'device',
-            request: 0x1E, value: 0x00, index: 0x00 // Сброс порта
-        });
-        
-        // Включаем DTR и RTS (высокий уровень), чтобы ESP32 вышла из режима сброса
-        await this.device.controlTransferOut({
-            requestType: 'vendor', recipient: 'device',
-            request: 0x07, value: 0x0303, index: this.interface
-        });
-    } catch (e) {
-        console.log("Вендорная инициализация не поддерживается, пропускаем...");
-    }
+            // --- ИНИЦИАЛИЗАЦИЯ (Важно для Android) ---
+            log("Настройка чипа...");
+            try {
+                // Установка Baud Rate 9600 (чисто для CH340/CP2102)
+                await this.device.controlTransferOut({
+                    requestType: 'vendor', recipient: 'device',
+                    request: 0x1E, value: 0, index: 0 
+                });
+                // Включаем DTR и RTS (чтобы ESP32 не висела в Reset)
+                await this.device.controlTransferOut({
+                    requestType: 'vendor', recipient: 'device',
+                    request: 0x07, value: 0x0303, index: this.interface
+                });
+                log("Чип инициализирован!");
+            } catch (e) {
+                log("Инициализация пропущена: " + e.message);
+            }
+
             this.readable = {
                 getReader: () => ({
                     read: async () => {
@@ -166,23 +171,19 @@
         }
     }
 
-    // --- ЛОГИКА ---
     let port, writer;
     let isSyncing = false;
 
-    // Инициализация при загрузке
     window.addEventListener('load', () => {
         generateEQ();
         initBalancePad();
     });
 
-    // ОБРАБОТЧИК КНОПКИ (Используем ID напрямую)
     document.getElementById('connectBtn').onclick = async function() {
         try {
-            console.log("Запрос USB...");
+            log("Запрос устройства...");
             const device = await navigator.usb.requestDevice({ filters: [] });
             port = new USBSerialDevice(device);
-            
             await port.open();
             
             document.getElementById('status').innerText = "Connected";
@@ -190,10 +191,11 @@
             this.style.display = 'none';
 
             writer = port.writable.getWriter();
+            log("Порт открыт. Отправляю DUMP...");
             setTimeout(() => sendRaw("DUMP"), 1000);
             readLoop();
         } catch (e) {
-            alert("Ошибка при подключении: " + e.message);
+            log("ОШИБКА: " + e.message);
         }
     };
 
@@ -204,16 +206,30 @@
                 const { value, done } = await reader.read();
                 if (done) break;
                 const text = new TextDecoder().decode(value);
+                log("RX: " + text.trim()); // Видим, что пришло от ESP
                 processIncoming(text);
             }
         } catch (e) {
-            console.error("Чтение прервано", e);
+            log("Ошибка чтения: " + e.message);
         }
     }
 
+    async function sendRaw(text) {
+        if (writer) {
+            try {
+                // Добавляем \r\n (ESP32 часто ждет именно эту пару)
+                const data = new TextEncoder().encode(text + "\r\n");
+                await writer.write(data);
+                log("TX: " + text); // Видим, что мы отправляем
+            } catch(e) {
+                log("Ошибка TX: " + e.message);
+            }
+        }
+    }
+
+    // --- Твой старый код processIncoming, parseState и UI остается ниже ---
     let serialBuffer = "";
     function processIncoming(text) {
-        console.log("Пришло из ESP:", text);
         serialBuffer += text;
         let lines = serialBuffer.split('\n');
         serialBuffer = lines.pop();
@@ -227,9 +243,9 @@
         try {
             const raw = line.replace("STATE:", "").replace(",END", "").trim();
             const d = raw.split(",").map(Number);
-            if (document.getElementById('volVal')) document.getElementById('volVal').innerText = d[0];
-            const volSlider = document.querySelector('input[oninput*="voll"]');
-            if (volSlider) volSlider.value = d[0];
+            document.getElementById('volVal').innerText = d[0];
+            const slider = document.querySelector('input[oninput*="voll"]');
+            if (slider) slider.value = d[0];
         } catch(e) {}
         isSyncing = false;
     }
@@ -239,30 +255,11 @@
         sendRaw(`${key}:${Math.floor(val)}`);
     }
 
-    async function sendRaw(text) {
-    if (writer) {
-        try {
-            // Добавляем \r\n для надежности
-            const data = new TextEncoder().encode(text + "\r\n");
-            await writer.write(data);
-            console.log("Отправлено:", text);
-        } catch(e) {
-            console.error("Ошибка отправки:", e);
-        }
-    } else {
-        console.warn("Writer не готов!");
-    }
-}
-
-    // UI
     function openTab(id) {
         document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active');
-        // Находим кнопку, которая была нажата, по тексту или ID
-        if (window.event) {
-            window.event.target.classList.add('active');
-        }
+        if (window.event && window.event.target) window.event.target.classList.add('active');
     }
 
     function setInput(type, transmit=true) {
@@ -278,10 +275,8 @@
         for (let i = 0; i < 7; i++) {
             const div = document.createElement('div');
             div.className = 'eq-band';
-            div.innerHTML = `
-                <div style="font-size:0.7rem; margin-bottom:5px;">Band ${i+1}</div>
-                <input type="range" class="eq-slider-vert" id="eqg${i}" min="-15" max="15" value="0" oninput="send('eqg${i}', this.value)">
-            `;
+            div.innerHTML = `<div style="font-size:0.7rem; margin-bottom:5px;">Band ${i+1}</div>
+                <input type="range" class="eq-slider-vert" id="eqg${i}" min="-15" max="15" value="0" oninput="send('eqg${i}', this.value)">`;
             container.appendChild(div);
         }
     }
@@ -290,15 +285,20 @@
         const canvas = document.getElementById('balCanvas');
         if (!canvas) return;
         const ctx = canvas.getContext('2d');
-        const draw = () => {
-            ctx.clearRect(0,0,300,300);
-            ctx.strokeStyle = '#555';
-            ctx.strokeRect(150,0,0,300); ctx.strokeRect(0,150,300,0);
-        };
-        draw();
+        ctx.clearRect(0,0,300,300);
+        ctx.strokeStyle = '#555';
+        ctx.strokeRect(150,0,0,300); ctx.strokeRect(0,150,300,0);
     }
     </script>
     
 
+    
+<div class="card" style="margin-top: 20px;">
+    <h3>Debug Log</h3>
+    <div id="debugLog" style="height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; background: #000; color: #0f0; padding: 5px; border-radius: 5px;">
+        Waiting for data...
+    </div>
+</div>
+    
 </body>
 </html>
