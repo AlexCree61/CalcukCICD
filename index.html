@@ -196,115 +196,242 @@
                 const readerInstance = port.readable.getReader();
                 try {
                     while (true) {
-                        const { value, done } = await readerInstance.read();
-                        if (done) break;
-                        const text = new TextDecoder().decode(value);
-                        processIncoming(text);
-                    }
-                } finally {
-                    readerInstance.releaseLock();
-                }
-            }
+<script>
+    // --- ПОЛНОСТЬЮ ИСПРАВЛЕННЫЙ ПОЛИФИЛ ---
+    class CustomSerialPort {
+        constructor(device) {
+            this.device = device;
+            this.interfaceNumber = 0;
+            this.endpointIn = 0;
+            this.endpointOut = 0;
+            this.readable = null;
+            this.writable = null;
         }
 
-        let serialBuffer = "";
-        function processIncoming(text) {
-            serialBuffer += text;
-            if (serialBuffer.includes('\n')) {
-                const lines = serialBuffer.split('\n');
-                serialBuffer = lines.pop();
-                for (const line of lines) {
-                    if (line.startsWith("STATE:")) parseState(line);
+        async open(options) {
+            await this.device.open();
+            
+            // 1. Выбираем конфигурацию, если она не выбрана
+            if (this.device.configuration === null) {
+                await this.device.selectConfiguration(1);
+            }
+            
+            // 2. Ищем интерфейс, у которого есть эндпоинты (точки входа/выхода данных)
+            let iface = this.device.configuration.interfaces.find(i => 
+                i.alternates[0].endpoints && i.alternates[0].endpoints.length > 0
+            );
+
+            // Если не нашли через фильтр, берем первый попавшийся (обычно 0 или 1)
+            if (!iface) iface = this.device.configuration.interfaces[0];
+            
+            this.interfaceNumber = iface.interfaceNumber;
+            
+            // 3. Захватываем интерфейс
+            await this.device.claimInterface(this.interfaceNumber);
+            
+            const endpoints = iface.alternates[0].endpoints;
+            
+            // Ищем эндпоинты по направлению
+            const inEp = endpoints.find(e => e.direction === 'in');
+            const outEp = endpoints.find(e => e.direction === 'out');
+
+            if (!inEp || !outEp) {
+                throw new Error("Не найдены каналы данных (In/Out Endpoints)");
+            }
+
+            this.endpointIn = inEp.endpointNumber;
+            this.endpointOut = outEp.endpointNumber;
+
+            // 4. Настраиваем потоки
+            this.readable = {
+                getReader: () => {
+                    return {
+                        read: async () => {
+                            try {
+                                const result = await this.device.transferIn(this.endpointIn, 64);
+                                return { value: new Uint8Array(result.data.buffer), done: false };
+                            } catch (e) { return { done: true }; }
+                        },
+                        releaseLock: () => {}
+                    };
                 }
+            };
+
+            this.writable = {
+                getWriter: () => {
+                    return {
+                        write: async (data) => {
+                            await this.device.transferOut(this.endpointOut, data);
+                        },
+                        releaseLock: () => {}
+                    };
+                }
+            };
+        }
+    }
+
+    const WebSerialPolyfill = {
+        async requestPort() {
+            // Запрашиваем любое устройство
+            const device = await navigator.usb.requestDevice({ filters: [] });
+            return new CustomSerialPort(device);
+        }
+    };
+
+    // --- ЛОГИКА ПРИЛОЖЕНИЯ ---
+    let port, writer;
+    let isSyncing = false;
+
+    window.addEventListener('load', () => {
+        generateEQ();
+        initBalancePad();
+    });
+
+    document.getElementById('connectBtn').addEventListener('click', async () => {
+        try {
+            port = await WebSerialPolyfill.requestPort();
+            await connectToPort();
+        } catch (e) {
+            alert("Ошибка выбора: " + e.message);
+        }
+    });
+
+    async function connectToPort() {
+        try {
+            await port.open({ baudRate: 9600 });
+            const status = document.getElementById('status');
+            status.innerText = "Connected";
+            status.classList.add('ok');
+            document.getElementById('connectBtn').style.display = 'none';
+
+            writer = port.writable.getWriter();
+            setTimeout(() => sendRaw("DUMP"), 1500);
+            readLoop();
+        } catch (e) {
+            console.error(e);
+            alert("Ошибка открытия: " + e.message);
+        }
+    }
+
+    async function readLoop() {
+        if (!port || !port.readable) return;
+        const readerInstance = port.readable.getReader();
+        try {
+            while (true) {
+                const { value, done } = await readerInstance.read();
+                if (done) break;
+                const text = new TextDecoder().decode(value);
+                processIncoming(text);
+            }
+        } catch(e) {
+            console.error("Read error:", e);
+        } finally {
+            readerInstance.releaseLock();
+        }
+    }
+
+    let serialBuffer = "";
+    function processIncoming(text) {
+        serialBuffer += text;
+        if (serialBuffer.includes('\n')) {
+            const lines = serialBuffer.split('\n');
+            serialBuffer = lines.pop();
+            for (const line of lines) {
+                if (line.startsWith("STATE:")) parseState(line);
             }
         }
+    }
 
-        function parseState(line) {
-            isSyncing = true;
+    function parseState(line) {
+        isSyncing = true;
+        try {
+            const raw = line.replace("STATE:", "").replace(",END", "").trim();
+            const d = raw.split(",").map(Number);
+            document.getElementById('volVal').innerText = d[0];
+            const volInp = document.querySelector('input[oninput*="voll"]');
+            if (volInp) volInp.value = d[0];
+            setInput(d[1] === 2 ? 'Bluetooth' : 'USB', false);
+        } catch(e) {}
+        isSyncing = false;
+    }
+
+    async function send(key, val) {
+        if (isSyncing) return;
+        sendRaw(`${key}:${Math.floor(val)}`);
+    }
+
+    async function sendRaw(text) {
+        if (writer) {
             try {
-                const raw = line.replace("STATE:", "").replace(",END", "").trim();
-                const d = raw.split(",").map(Number);
-                document.getElementById('volVal').innerText = d[0];
-                const volInput = document.querySelector('input[oninput*="voll"]');
-                if (volInput) volInput.value = d[0];
-                setInput(d[1] === 2 ? 'Bluetooth' : 'USB', false);
-                // Тут можно добавить синхронизацию остальных параметров
-            } catch(e) {}
-            isSyncing = false;
-        }
-
-        async function send(key, val) {
-            if (isSyncing) return;
-            sendRaw(`${key}:${Math.floor(val)}`);
-        }
-
-        async function sendRaw(text) {
-            if (writer) {
                 await writer.write(new TextEncoder().encode(text + "\n"));
-            }
+            } catch(e) { console.error("Write error:", e); }
+        }
+    }
+
+    function openTab(id) {
+        document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        if (event && event.target) event.target.classList.add('active');
+    }
+
+    function setInput(type, transmit=true) {
+        const btnBT = document.getElementById('btnSrcBT');
+        const btnUSB = document.getElementById('btnSrcUSB');
+        if (btnBT) btnBT.className = `btn-toggle ${type==='Bluetooth'?'active':''}`;
+        if (btnUSB) btnUSB.className = `btn-toggle ${type==='USB'?'active':''}`;
+        if (transmit) send('ins', type === 'Bluetooth' ? 2 : 0);
+    }
+
+    function generateEQ() {
+        const bands = ["Band 1", "Band 2", "Band 3", "Band 4", "Band 5", "Band 6", "Band 7"];
+        const container = document.getElementById('eqContainer');
+        if (!container) return;
+        container.innerHTML = '';
+        bands.forEach((name, i) => {
+            const div = document.createElement('div');
+            div.className = 'eq-band';
+            div.innerHTML = `
+                <div style="font-size:0.7rem; margin-bottom:5px;">${name}</div>
+                <input type="range" class="eq-slider-vert" id="eqg${i}" min="-15" max="15" value="0" oninput="send('eqg${i}', this.value)">
+            `;
+            container.appendChild(div);
+        });
+    }
+
+    function initBalancePad() {
+        const canvas = document.getElementById('balCanvas');
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let w = canvas.width, h = canvas.height;
+        let cx = w/2, cy = h/2;
+        let puckX = cx, puckY = cy;
+
+        function draw() {
+            ctx.clearRect(0, 0, w, h);
+            ctx.strokeStyle = '#555';
+            ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+            ctx.fillStyle = '#007bff';
+            ctx.beginPath(); ctx.arc(puckX, puckY, 15, 0, Math.PI*2); ctx.fill();
         }
 
-        function openTab(id) {
-            document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById(id).classList.add('active');
-            event.target.classList.add('active');
-        }
-
-        function setInput(type, transmit=true) {
-            document.getElementById('btnSrcBT').className = `btn-toggle ${type==='Bluetooth'?'active':''}`;
-            document.getElementById('btnSrcUSB').className = `btn-toggle ${type==='USB'?'active':''}`;
-            if (transmit) send('ins', type === 'Bluetooth' ? 2 : 0);
-        }
-
-        function generateEQ() {
-            const bands = ["Band 1", "Band 2", "Band 3", "Band 4", "Band 5", "Band 6", "Band 7"];
-            const container = document.getElementById('eqContainer');
-            if (!container) return;
-            bands.forEach((name, i) => {
-                const div = document.createElement('div');
-                div.className = 'eq-band';
-                div.innerHTML = `
-                    <div style="font-size:0.7rem; margin-bottom:5px;">${name}</div>
-                    <input type="range" class="eq-slider-vert" id="eqg${i}" min="-15" max="15" value="0" oninput="send('eqg${i}', this.value)">
-                `;
-                container.appendChild(div);
-            });
-        }
-
-        function initBalancePad() {
-            const canvas = document.getElementById('balCanvas');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            let w = canvas.width, h = canvas.height;
-            let cx = w/2, cy = h/2;
-            let puckX = cx, puckY = cy;
-
-            function draw() {
-                ctx.clearRect(0, 0, w, h);
-                ctx.strokeStyle = '#555';
-                ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, h); ctx.stroke();
-                ctx.beginPath(); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
-                ctx.fillStyle = '#007bff';
-                ctx.beginPath(); ctx.arc(puckX, puckY, 15, 0, Math.PI*2); ctx.fill();
-            }
-
-            function updatePos(evt) {
-                const rect = canvas.getBoundingClientRect();
-                const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
-                const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
-                puckX = Math.max(0, Math.min(clientX - rect.left, w));
-                puckY = Math.max(0, Math.min(clientY - rect.top, h));
-                draw();
-                // Логика расчета баланса здесь...
-            }
-
-            canvas.addEventListener('mousedown', (e) => { updatePos(e); canvas.addEventListener('mousemove', updatePos); });
-            window.addEventListener('mouseup', () => canvas.removeEventListener('mousemove', updatePos));
-            canvas.addEventListener('touchstart', (e) => { e.preventDefault(); updatePos(e); canvas.addEventListener('touchmove', updatePos); }, {passive: false});
-            window.addEventListener('touchend', () => canvas.removeEventListener('touchmove', updatePos));
+        function updatePos(evt) {
+            const rect = canvas.getBoundingClientRect();
+            const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+            const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+            puckX = Math.max(0, Math.min(clientX - rect.left, w));
+            puckY = Math.max(0, Math.min(clientY - rect.top, h));
             draw();
         }
-    </script>
+
+        canvas.addEventListener('mousedown', (e) => { updatePos(e); canvas.addEventListener('mousemove', updatePos); });
+        window.addEventListener('mouseup', () => canvas.removeEventListener('mousemove', updatePos));
+        canvas.addEventListener('touchstart', (e) => { e.preventDefault(); updatePos(e); canvas.addEventListener('touchmove', updatePos); }, {passive: false});
+        window.addEventListener('touchend', () => canvas.removeEventListener('touchmove', updatePos));
+        draw();
+    }
+</script>
+    
 </body>
 </html>
