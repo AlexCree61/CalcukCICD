@@ -159,46 +159,57 @@
     </div>
 
     <script>
-        // --- SERIAL POLYFILL START ---
-// Этот код заменяет внешнюю библиотеку
-(function() {
-    if ("serial" in navigator) return;
-    class SerialPort {
-        constructor(device) {
-            this.device_ = device;
-            this.interfaceNumber_ = 0;
-            this.endpointIn_ = 0;
-            this.endpointOut_ = 0;
-        }
-        async open(options) {
-            await this.device_.open();
-            if (this.device_.configuration === null) await this.device_.selectConfiguration(1);
-            await this.device_.claimInterface(this.interfaceNumber_);
-            // Настройка для большинства USB-Serial чипов (CP2102, CH340)
-            await this.device_.controlTransferOut({
-                requestType: 'vendor', recipient: 'device', request: 0x00, value: 0x01, index: 0x00
-            });
-            this.endpointIn_ = 2; this.endpointOut_ = 2; // Стандартные эндпоинты
-            this.readable = new ReadableStream({
-                start: (controller) => { this.read_(controller); }
-            });
-            this.writable = new WritableStream({
-                write: (chunk) => { return this.write_(chunk); }
-            });
-        }
-        async write_(data) {
-            await this.device_.transferOut(this.endpointOut_, data);
-        }
-        async read_(controller) {
-            while (true) {
-                const result = await this.device_.transferIn(this.endpointIn_, 64);
-                controller.enqueue(result.data);
-            }
+        // Локальный мини-полифил для работы через WebUSB
+const WebSerialPolyfill = {
+    async requestPort() {
+        const device = await navigator.usb.requestDevice({ filters: [] });
+        return new CustomSerialPort(device);
+    }
+};
+
+class CustomSerialPort {
+    constructor(device) {
+        this.device = device;
+        this.interfaceNumber = 0; 
+        this.endpointIn = 0;
+        this.endpointOut = 0;
+    }
+
+    async open(options) {
+        await this.device.open();
+        if (this.device.configuration === null) await this.device.selectConfiguration(1);
+        
+        // Поиск нужного интерфейса и эндпоинтов (стандарт для CDC/Serial)
+        const interface = this.device.configuration.interfaces.find(i => 
+            i.alternates[0].endpointGroups.length > 0);
+        this.interfaceNumber = interface.interfaceNumber;
+        
+        await this.device.claimInterface(this.interfaceNumber);
+        
+        const endpoints = interface.alternates[0].endpoints;
+        this.endpointIn = endpoints.find(e => e.direction === 'in').endpointNumber;
+        this.endpointOut = endpoints.find(e => e.direction === 'out').endpointNumber;
+
+        this.readable = new ReadableStream({
+            start: (controller) => this.readLoop(controller)
+        });
+
+        this.writable = {
+            getWriter: () => ({
+                write: (data) => this.device.transferOut(this.endpointOut, data)
+            })
+        };
+    }
+
+    async readLoop(controller) {
+        while (this.device.opened) {
+            try {
+                const result = await this.device.transferIn(this.endpointIn, 64);
+                if (result.data) controller.enqueue(new Uint8Array(result.data.buffer));
+            } catch (e) { break; }
         }
     }
-    window.SerialPortPolyfill = SerialPort;
-})();
-// --- SERIAL POLYFILL END ---
+}
                 // --- LOGIC ---
         let port, writer, reader;
         let isSyncing = false;
@@ -218,20 +229,9 @@
 
         document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
-        // 1. Находим USB устройство (это у тебя работает через Test USB)
-        const usbDevice = await navigator.usb.requestDevice({ filters: [] });
-        
-        if (usbDevice) {
-            // 2. Используем наш локальный полифил
-            if (window.SerialPortPolyfill) {
-                port = new SerialPortPolyfill(usbDevice);
-            } else {
-                // Если вдруг нативная поддержка уже есть (для будущего)
-                port = new SerialPort(usbDevice);
-            }
-            
-            await connectToPort();
-        }
+        // Используем наш локальный поиск вместо системного
+        port = await WebSerialPolyfill.requestPort();
+        await connectToPort();
     } catch (e) {
         console.error(e);
         alert("Ошибка: " + e.message);
