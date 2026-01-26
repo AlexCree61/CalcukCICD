@@ -120,7 +120,6 @@
             await this.device.open();
             if (this.device.configuration === null) await this.device.selectConfiguration(1);
 
-            // Ищем интерфейс с данными
             const iface = this.device.configuration.interfaces.find(i => 
                 i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
             ) || this.device.configuration.interfaces[0];
@@ -132,24 +131,34 @@
             this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
             this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
 
-            // --- ИНИЦИАЛИЗАЦИЯ (Важно для Android) ---
-            log("Настройка чипа...");
+            // --- НАСТРОЙКА СКОРОСТИ (BAUD RATE) ---
+            log("Настройка скорости 115200...");
             try {
-                // Установка Baud Rate 9600 (чисто для CH340/CP2102)
+                // Команда для чипов CP2102 / CP2104 (часто на ESP32)
                 await this.device.controlTransferOut({
                     requestType: 'vendor', recipient: 'device',
-                    request: 0x1E, value: 0, index: 0 
+                    request: 0x1E, value: 0x00, index: 0x00 // Сброс
                 });
-                // Включаем DTR и RTS (чтобы ESP32 не висела в Reset)
+                
+                // Установка 115200 baud
+                // Для CP210x это делается так:
+                await this.device.controlTransferOut({
+                    requestType: 'vendor', recipient: 'device',
+                    request: 0x01, value: 0x00, index: 0x0010 // 0x0010 = 115200 для некоторых чипов
+                });
+
+                // Включаем DTR/RTS (чтобы ESP32 вышла из Reset)
                 await this.device.controlTransferOut({
                     requestType: 'vendor', recipient: 'device',
                     request: 0x07, value: 0x0303, index: this.interface
                 });
-                log("Чип инициализирован!");
+                
+                log("Скорость установлена!");
             } catch (e) {
-                log("Инициализация пропущена: " + e.message);
+                log("Ошибка настройки скорости: " + e.message);
             }
 
+            // Настройка потоков (оставляем как было)
             this.readable = {
                 getReader: () => ({
                     read: async () => {
