@@ -2,7 +2,6 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <script src="https://unpkg.com/serial-polyfill@1.0.17/build/serial.js"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>TDA7416 Control</title>
     <link rel="manifest" href="manifest.json">
@@ -160,6 +159,46 @@
     </div>
 
     <script>
+        // --- SERIAL POLYFILL START ---
+// Этот код заменяет внешнюю библиотеку
+(function() {
+    if ("serial" in navigator) return;
+    class SerialPort {
+        constructor(device) {
+            this.device_ = device;
+            this.interfaceNumber_ = 0;
+            this.endpointIn_ = 0;
+            this.endpointOut_ = 0;
+        }
+        async open(options) {
+            await this.device_.open();
+            if (this.device_.configuration === null) await this.device_.selectConfiguration(1);
+            await this.device_.claimInterface(this.interfaceNumber_);
+            // Настройка для большинства USB-Serial чипов (CP2102, CH340)
+            await this.device_.controlTransferOut({
+                requestType: 'vendor', recipient: 'device', request: 0x00, value: 0x01, index: 0x00
+            });
+            this.endpointIn_ = 2; this.endpointOut_ = 2; // Стандартные эндпоинты
+            this.readable = new ReadableStream({
+                start: (controller) => { this.read_(controller); }
+            });
+            this.writable = new WritableStream({
+                write: (chunk) => { return this.write_(chunk); }
+            });
+        }
+        async write_(data) {
+            await this.device_.transferOut(this.endpointOut_, data);
+        }
+        async read_(controller) {
+            while (true) {
+                const result = await this.device_.transferIn(this.endpointIn_, 64);
+                controller.enqueue(result.data);
+            }
+        }
+    }
+    window.SerialPortPolyfill = SerialPort;
+})();
+// --- SERIAL POLYFILL END ---
                 // --- LOGIC ---
         let port, writer, reader;
         let isSyncing = false;
@@ -177,28 +216,25 @@
             initBalancePad();
         });
 
-        // Старый код, который мы ищем:
-document.getElementById('connectBtn').addEventListener('click', async () => {
+        document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
-        // 1. Выбираем USB-устройство (это точно работает, как мы выяснили)
+        // 1. Находим USB устройство (это у тебя работает через Test USB)
         const usbDevice = await navigator.usb.requestDevice({ filters: [] });
         
         if (usbDevice) {
-            // 2. ВНИМАНИЕ: Используем конструктор из полифила (serial.SerialPort)
-            // Это обходит ошибку "Illegal constructor"
-            if (typeof serial !== 'undefined' && serial.SerialPort) {
-                port = new serial.SerialPort(usbDevice);
+            // 2. Используем наш локальный полифил
+            if (window.SerialPortPolyfill) {
+                port = new SerialPortPolyfill(usbDevice);
             } else {
-                // Если вдруг объект serial не найден, пробуем альтернативный доступ
-                throw new Error("Библиотека-полифил не загружена. Проверьте подключение скрипта.");
+                // Если вдруг нативная поддержка уже есть (для будущего)
+                port = new SerialPort(usbDevice);
             }
             
-            // 3. Открываем порт
             await connectToPort();
         }
     } catch (e) {
         console.error(e);
-        alert("Ошибка подключения: " + e.message);
+        alert("Ошибка: " + e.message);
     }
 });
                
