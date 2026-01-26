@@ -180,13 +180,18 @@
         // Старый код, который мы ищем:
 document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
-        // 1. Сначала находим USB-устройство (как в вашем успешном тесте)
+        // 1. Выбираем USB-устройство (это точно работает, как мы выяснили)
         const usbDevice = await navigator.usb.requestDevice({ filters: [] });
         
         if (usbDevice) {
-            // 2. Создаем Serial-порт на базе этого USB-устройства через полифил
-            // Библиотека serial-polyfill добавляет класс SerialPort в глобальное пространство
-            port = new SerialPort(usbDevice);
+            // 2. ВНИМАНИЕ: Используем конструктор из полифила (serial.SerialPort)
+            // Это обходит ошибку "Illegal constructor"
+            if (typeof serial !== 'undefined' && serial.SerialPort) {
+                port = new serial.SerialPort(usbDevice);
+            } else {
+                // Если вдруг объект serial не найден, пробуем альтернативный доступ
+                throw new Error("Библиотека-полифил не загружена. Проверьте подключение скрипта.");
+            }
             
             // 3. Открываем порт
             await connectToPort();
