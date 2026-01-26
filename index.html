@@ -190,14 +190,7 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
         alert(e.message);
     }
 });
-        async function testUSB() {
-    try {
-        const device = await navigator.usb.requestDevice({ filters: [] });
-        alert("Устройство найдено: " + device.productName);
-    } catch (e) {
-        alert("USB устройство не выбрано или не найдено: " + e.message);
-    }
-}
+        
        async function connectToPort() {
     try {
         // Добавляем расширенные настройки открытия
