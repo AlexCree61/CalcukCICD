@@ -181,21 +181,13 @@
 document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
         if (!port) {
-            // Если нативного serial нет, полифил подменит navigator.serial
-            // Для Android/WebUSB иногда нужно явно указать фильтры (VID чипов)
-            const filters = [
-                { usbVendorId: 0x10c4 }, // Silicon Labs (CP2102)
-                { usbVendorId: 0x1a86 }, // Qinheng (CH340)
-                { usbVendorId: 0x303a }, // Espressif (ESP32-S2/S3 native)
-                { usbVendorId: 0x0403 }  // FTDI
-            ];
-            
-            // Вызываем окно выбора устройства
-            port = await navigator.serial.requestPort({ filters });
+            // Убираем filters, чтобы увидеть все устройства
+            port = await navigator.serial.requestPort(); 
         }
         await connectToPort();
     } catch (e) {
-        console.error("Selection cancelled or failed:", e);
+        console.error("ОШИБКА:", e);
+        alert(e.message);
     }
 });
 
