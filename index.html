@@ -195,10 +195,9 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
        async function testUSB() {
     try {
         const device = await navigator.usb.requestDevice({ filters: [] });
-        alert(Найдено: ${device.productName}\nVID: ${device.vendorId}\nPID: ${device.productId});
-        console.log(device);
+        alert("Устройство найдено: " + device.productName);
     } catch (e) {
-        alert("Ошибка: " + e.message);
+        alert("USB устройство не выбрано или не найдено: " + e.message);
     }
 }
         
