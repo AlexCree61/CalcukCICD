@@ -180,43 +180,33 @@
         // Старый код, который мы ищем:
 document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
-        // Явно указываем фильтры для поиска Serial-устройств через WebUSB
-        const filters = [
-            { usbVendorId: 0x10c4 }, // CP2102
-            { usbVendorId: 0x1a86 }, // CH340
-            { usbVendorId: 0x303a }, // ESP32 native
-            { usbVendorId: 0x0403 }  // FTDI
-        ];
-
-        // Запрашиваем порт. Полифил перехватит этот вызов и покажет список USB
-        port = await navigator.serial.requestPort({ filters });
+        // 1. Сначала находим USB-устройство (как в вашем успешном тесте)
+        const usbDevice = await navigator.usb.requestDevice({ filters: [] });
         
-        // Маленькая пауза, чтобы Android успел передать права
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        await connectToPort();
+        if (usbDevice) {
+            // 2. Создаем Serial-порт на базе этого USB-устройства через полифил
+            // Библиотека serial-polyfill добавляет класс SerialPort в глобальное пространство
+            port = new SerialPort(usbDevice);
+            
+            // 3. Открываем порт
+            await connectToPort();
+        }
     } catch (e) {
         console.error(e);
-        alert("Не удалось подключить Serial: " + e.message);
+        alert("Ошибка подключения: " + e.message);
     }
 });
                
         async function connectToPort() {
     try {
-        // Добавляем расширенные настройки открытия
+        // Если порт уже создан (через new SerialPort), открываем его
         await port.open({ 
             baudRate: 9600,
             dataBits: 8,
             stopBits: 1,
             parity: 'none',
-            flowControl: 'none' // Или попробуй 'hardware', если не сработает
+            flowControl: 'none' 
         });
-
-        // После открытия на некоторых ESP32 нужно "дёрнуть" сигналы, 
-        // чтобы чип вышел из режима прошивки/сброса
-        if (port.setSignals) {
-            await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-        }
 
         const status = document.getElementById('status');
         status.innerText = "Connected";
@@ -224,11 +214,13 @@ document.getElementById('connectBtn').addEventListener('click', async () => {
         document.getElementById('connectBtn').style.display = 'none';
 
         writer = port.writable.getWriter();
-        setTimeout(() => sendRaw("DUMP"), 1500);
+        
+        // Даем ESP32 время проснуться после подключения
+        setTimeout(() => sendRaw("DUMP"), 1500); 
         readLoop();
     } catch (e) {
         console.error(e);
-        alert("Error: " + e.message);
+        alert("Не удалось открыть порт: " + e.message);
     }
 }
 
