@@ -213,6 +213,7 @@
 
     let serialBuffer = "";
     function processIncoming(text) {
+        console.log("Пришло из ESP:", text);
         serialBuffer += text;
         let lines = serialBuffer.split('\n');
         serialBuffer = lines.pop();
