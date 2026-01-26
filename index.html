@@ -54,7 +54,6 @@
     <div class="header">
     <div id="status" class="status">Disconnected</div>
     <button id="connectBtn">Connect</button>
-    <button onclick="testUSB()" style="background: #444; color: white; margin-left: 10px; padding: 8px 15px; border-radius: 5px; border: none;">Test USB</button>
 </div>
 
     <div class="tabs">
@@ -181,26 +180,27 @@
         // Старый код, который мы ищем:
 document.getElementById('connectBtn').addEventListener('click', async () => {
     try {
-        if (!port) {
-            // Убираем filters, чтобы увидеть все устройства
-            port = await navigator.serial.requestPort(); 
-        }
+        // Явно указываем фильтры для поиска Serial-устройств через WebUSB
+        const filters = [
+            { usbVendorId: 0x10c4 }, // CP2102
+            { usbVendorId: 0x1a86 }, // CH340
+            { usbVendorId: 0x303a }, // ESP32 native
+            { usbVendorId: 0x0403 }  // FTDI
+        ];
+
+        // Запрашиваем порт. Полифил перехватит этот вызов и покажет список USB
+        port = await navigator.serial.requestPort({ filters });
+        
+        // Маленькая пауза, чтобы Android успел передать права
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         await connectToPort();
     } catch (e) {
-        console.error("ОШИБКА:", e);
-        alert(e.message);
+        console.error(e);
+        alert("Не удалось подключить Serial: " + e.message);
     }
 });
-        
-       async function testUSB() {
-    try {
-        const device = await navigator.usb.requestDevice({ filters: [] });
-        alert("Устройство найдено: " + device.productName);
-    } catch (e) {
-        alert("USB устройство не выбрано или не найдено: " + e.message);
-    }
-}
-        
+               
         async function connectToPort() {
     try {
         // Добавляем расширенные настройки открытия
