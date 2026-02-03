@@ -95,8 +95,10 @@
         <div class="card">
             <h3>Loudness</h3>
             <div class="row"><label>Enable</label><input type="checkbox" id="lByp" onchange="send('l_byp', this.checked?1:0)"></div>
-            <label>Attenuation</label><input type="range" min="0" max="19" value="0" oninput="send('l_att', this.value)">
+            <label>Attenuation</label><input type="range" min="0" max="19" value="19" oninput="send('l_att', this.value)">
             <label>Center Freq</label><select onchange="send('l_cen', this.value)" id="lCen"><option value="0">200Hz</option><option value="1">400Hz</option><option value="2">600Hz</option><option value="3">800Hz</option></select>
+            <div class="row"><label>Front Coupling DC</label><input type="checkbox" id="frontCp" onchange="send('f_coup', this.checked?1:0)"></div>
+            <div class="row"><label>Rear Equalizing Effect</label><input type="checkbox" id="rearEf" onchange="send('r_eff', this.checked?1:0)"></div>
         </div>
     </div>
 
