@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>TDA7416 Control</title>
-    <link rel="manifest" href="manifest.json">
     <style>
         :root { --bg: #121212; --card: #1e1e1e; --accent: #007bff; --text: #fff; --text-sec: #888; }
         body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; user-select: none; }
@@ -12,94 +11,40 @@
         .status { font-size: 0.8rem; color: #f44336; }
         .status.ok { color: #00e676; }
         .tabs { display: flex; overflow-x: auto; background: #252525; }
-        .tab-btn { flex: 1; padding: 15px; background: none; border: none; color: #aaa; font-size: 1rem; cursor: pointer; border-bottom: 2px solid transparent; min-width: 80px; }
+        .tab-btn { flex: 1; padding: 15px; background: none; border: none; color: #aaa; cursor: pointer; border-bottom: 2px solid transparent; min-width: 80px; }
         .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: bold; }
         .content { display: none; padding: 20px; padding-bottom: 80px; }
         .content.active { display: block; }
         .card { background: var(--card); border-radius: 12px; padding: 15px; margin-bottom: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         h3 { margin-top: 0; font-size: 1.1rem; color: #ddd; border-bottom: 1px solid #333; padding-bottom: 5px; }
-        label { display: block; margin-bottom: 5px; color: var(--text-sec); font-size: 0.9rem; }
-        input[type=range] { width: 100%; height: 6px; background: #444; border-radius: 5px; outline: none; -webkit-appearance: none; margin: 15px 0; }
-        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; background: var(--accent); border-radius: 50%; cursor: pointer; }
         .row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
-        select { background: #333; color: white; border: none; padding: 8px; border-radius: 5px; width: 100%; font-size: 1rem; }
+        input[type=range] { width: 100%; margin: 15px 0; }
         .btn-toggle { background: #333; color: #aaa; padding: 10px 20px; border-radius: 20px; border: 1px solid #444; cursor: pointer; flex: 1; margin: 0 5px; }
         .btn-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
         .eq-scroll { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
-        .eq-band { 
-        min-width: 85px; 
-        text-align: center; 
-        background: #252525; 
-        padding: 10px; 
-        border-radius: 8px; 
-        display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: center;
-        }
-        .btn-step {
-        background: #444;
-        color: white;
-        border: none;
-        width: 100%;
-        padding: 10px 0;
-        border-radius: 5px;
-        font-size: 1.2rem;
-        font-weight: bold;
-    }
-    
-    .btn-step:active { background: var(--accent); }
-    
-    .gain-val {
-        font-size: 1.2rem;
-        color: var(--accent);
-        font-weight: bold;
-        min-width: 35px;
-    }
-
-    .freq-toggle {
-        font-size: 0.7rem;
-        background: #333;
-        border: 1px solid #555;
-        color: #ccc;
-        border-radius: 4px;
-        padding: 2px 4px;
-        cursor: pointer;
-        width: 100%;
-    }
-
-    .q-select {
-        font-size: 0.8rem;
-        background: #1a1a1a;
-        color: #00e676;
-        border: 1px solid #444;
-        border-radius: 4px;
-        width: 100%;
-    }
-        .eq-slider-vert { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 30px; height: 150px; }
-        #balCanvas { background: #2b2b2b; border-radius: 10px; margin: 0 auto; display: block; touch-action: none; border: 2px solid #444; }
-        #connectBtn { background: var(--accent); color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
+        .eq-band { min-width: 85px; text-align: center; background: #252525; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+        .gain-val { font-size: 1.2rem; color: var(--accent); font-weight: bold; }
+        .btn-step { background: #444; color: white; border: none; padding: 10px 0; border-radius: 5px; font-weight: bold; }
+        .q-select, .freq-toggle, select { background: #333; color: white; border: 1px solid #444; padding: 5px; border-radius: 4px; width: 100%; }
     </style>
 </head>
 <body>
-
     <div class="header">
         <div id="status" class="status">Disconnected</div>
-        <button id="connectBtn">Connect</button>
+        <button id="connectBtn" style="background: var(--accent); color: white; border: none; padding: 8px 15px; border-radius: 5px;">Connect</button>
     </div>
 
     <div class="tabs">
         <button class="tab-btn active" onclick="openTab('main')">Main</button>
         <button class="tab-btn" onclick="openTab('eq')">EQ</button>
-        <button class="tab-btn" onclick="openTab('bal')">Balance</button>
-        <button class="tab-btn" onclick="openTab('adv')">Advanced</button>
+        <button class="tab-btn" onclick="openTab('bal')">Settings</button>
     </div>
 
     <div id="main" class="content active">
         <div class="card">
             <h3>Master Volume</h3>
             <h2 id="volVal" style="text-align: center; color: var(--accent);">-20</h2>
-            <input type="range" min="-159" max="40" value="-20" oninput="send('voll', this.value); document.getElementById('volVal').innerText = this.value">
+            <input type="range" id="volSlider" min="-159" max="40" value="-20" oninput="send('voll', this.value); document.getElementById('volVal').innerText = this.value">
         </div>
         <div class="card">
             <h3>Input Source</h3>
@@ -110,162 +55,90 @@
         </div>
         <div class="card">
             <h3>Preamp Gain</h3>
-            <input type="range" min="0" max="15" value="10" oninput="send('pre', this.value)">
+            <input type="range" id="preSlider" min="0" max="15" value="0" oninput="send('pre', this.value)">
         </div>
         <div class="card">
             <div class="row">
-                <h3>Mute</h3>
-                <label class="switch">
-                    <input type="checkbox" id="muteSw" onchange="send('mute', this.checked ? 0 : 1)" checked>
-                    <span>Sound ON</span>
-                </label>
+                <h3>Sound State</h3>
+                <input type="checkbox" id="muteSw" onchange="send('mute', this.checked ? 0 : 1)" checked>
             </div>
         </div>
     </div>
 
     <div id="eq" class="content">
         <div class="eq-scroll" id="eqContainer"></div>
-        <div class="card">
-            <h3>Subwoofer Config</h3>
-            <div class="row"><label>Freq</label><select onchange="send('s_fr', this.value)" id="subFr"><option value="0">Off</option><option value="1">90Hz</option><option value="2">135Hz</option><option value="3">180Hz</option><option value="4">225Hz</option></select></div>
-            <div class="row"><label>Q-Factor</label><select onchange="send('s_q', this.value)" id="subQ"><option value="0">3.5</option><option value="1">1.8</option></select></div>
-            <div class="row"><label>HPF</label><select onchange="send('s_hpc', this.value)" id="subHpc"><option value="0">90Hz</option><option value="1">135Hz</option><option value="2">180Hz</option><option value="3">225Hz</option></select></div>
-            <div class="row"><label>HP Filter</label><input type="checkbox" id="subHp" onchange="send('s_hp', this.checked?1:0)"></div>
-            <div class="row"><label>DC Coup</label><input type="checkbox" id="subCp" onchange="send('s_coup', this.checked?1:0)"></div>
-        </div>
     </div>
 
     <div id="bal" class="content">
-        <div class="card"><h3>Subwoofer Gain</h3><input type="range" min="-79" max="15" value="0" oninput="send('s_att', this.value)"></div>
-        <div class="card" style="text-align: center;"><h3>Fader / Balance</h3><canvas id="balCanvas" width="300" height="300"></canvas><p style="font-size: 0.8rem; margin-top: 5px;">Drag to adjust</p></div>
-    </div>
-
-    <div id="adv" class="content">
+        <div class="card">
+            <h3>Subwoofer Gain</h3>
+            <input type="range" id="subAttSlider" min="-79" max="15" value="0" oninput="send('s_att', this.value)">
+        </div>
         <div class="card">
             <h3>Loudness</h3>
             <div class="row"><label>Enable</label><input type="checkbox" id="lByp" onchange="send('l_byp', this.checked?1:0)"></div>
-            <label>Attenuation</label><input type="range" min="0" max="19" value="19" oninput="send('l_att', this.value)">
-            <label>Center Freq</label><select onchange="send('l_cen', this.value)" id="lCen"><option value="0">200Hz</option><option value="1">400Hz</option><option value="2">600Hz</option><option value="3">800Hz</option></select>
-            <div class="row"><label>Front Coupling DC</label><input type="checkbox" id="frontCp" onchange="send('f_coup', this.checked?1:0)"></div>
-            <div class="row"><label>Rear Equalizing Effect</label><input type="checkbox" id="rearEf" onchange="send('r_eff', this.checked?1:0)"></div>
+            <label>Attenuation</label><input type="range" id="lAttSlider" min="0" max="19" value="19" oninput="send('l_att', this.value)">
+            <label>Center Freq</label>
+            <select onchange="send('l_cen', this.value)" id="lCen">
+                <option value="0">200Hz</option><option value="1">400Hz</option><option value="2">600Hz</option><option value="3">800Hz</option>
+            </select>
         </div>
     </div>
 
+    <div class="card" style="margin: 20px;">
+        <h3>Debug Log</h3>
+        <div id="debugLog" style="height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; background: #000; color: #0f0; padding: 5px;">Waiting...</div>
+    </div>
+
     <script>
-    // Функция для вывода логов на экран
+    let port, writer, isSyncing = false;
+    let localEqGains = [0, 0, 0, 0, 0, 0, 0];
+    let serialBuffer = "";
+
     function log(msg) {
         const div = document.getElementById('debugLog');
-        if(div) {
-            div.innerHTML += "<div>" + msg + "</div>";
-            div.scrollTop = div.scrollHeight;
-        }
+        if(div) { div.innerHTML += "<div>" + msg + "</div>"; div.scrollTop = div.scrollHeight; }
     }
 
+    // Класс для работы с USB Serial (CP2102) [cite: 227-240]
     class USBSerialDevice {
-        constructor(device) {
-            this.device = device;
-            this.interface = 0;
-            this.epIn = 0;
-            this.epOut = 0;
-        }
-
+        constructor(device) { this.device = device; this.interface = 0; }
         async open() {
-    await this.device.open();
-    if (this.device.configuration === null) await this.device.selectConfiguration(1);
-
-    const iface = this.device.configuration.interfaces.find(i => 
-        i.alternates[0].endpoints && i.alternates[0].endpoints.length > 1
-    ) || this.device.configuration.interfaces[0];
-
-    this.interface = iface.interfaceNumber;
-    await this.device.claimInterface(this.interface);
-
-    const endpoints = iface.alternates[0].endpoints;
-    this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
-    this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
-
-    // --- СПЕЦИФИЧНАЯ НАСТРОЙКА CP2102 (115200) ---
-    log("Настройка CP2102: 115200...");
-    try {
-        // 1. Команда "IFC_ENABLE" (Включаем передачу данных)
-        await this.device.controlTransferOut({
-            requestType: 'vendor', recipient: 'interface',
-            request: 0x00, value: 0x0001, index: this.interface
-        });
-
-        // 2. Установка скорости 115200
-        // Для CP2102 это делается отправкой значения скорости в поле Data
-        const baudRate = 115200;
-        const data = new Uint8Array([
-            baudRate & 0xff,
-            (baudRate >> 8) & 0xff,
-            (baudRate >> 16) & 0xff,
-            (baudRate >> 24) & 0xff
-        ]);
-
-        await this.device.controlTransferOut({
-            requestType: 'vendor', recipient: 'interface',
-            request: 0x1E, value: 0x0000, index: this.interface
-        }, data);
-
-        // 3. Установка DTR и RTS в HIGH (чтобы ESP32 вышла из сброса)
-        await this.device.controlTransferOut({
-            requestType: 'vendor', recipient: 'interface',
-            request: 0x07, value: 0x0303, index: this.interface
-        });
-
-        log("CP2102 готов к работе!");
-    } catch (e) {
-        log("Ошибка CP2102: " + e.message);
-    }
-
-    this.readable = {
-        getReader: () => ({
-            read: async () => {
+            await this.device.open();
+            await this.device.selectConfiguration(1);
+            const iface = this.device.configuration.interfaces[0];
+            this.interface = iface.interfaceNumber;
+            await this.device.claimInterface(this.interface);
+            const endpoints = iface.alternates[0].endpoints;
+            this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
+            this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
+            
+            // Настройка CP2102 [cite: 231-236]
+            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x00, value:0x0001, index:this.interface});
+            const baudData = new Uint8Array([0x00, 0xC2, 0x01, 0x00]); // 115200
+            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x1E, value:0, index:this.interface}, baudData);
+            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x07, value:0x0303, index:this.interface});
+            
+            this.readable = { getReader: () => ({ read: async () => { 
                 const result = await this.device.transferIn(this.epIn, 64);
                 return { value: new Uint8Array(result.data.buffer), done: false };
-            },
-            releaseLock: () => {}
-        })
-    };
-
-    this.writable = {
-        getWriter: () => ({
-            write: async (data) => {
-                await this.device.transferOut(this.epOut, data);
-            },
-            releaseLock: () => {}
-        })
-    };
-}
+            }, releaseLock: () => {} }) };
+            this.writable = { getWriter: () => ({ write: async (data) => { await this.device.transferOut(this.epOut, data); }, releaseLock: () => {} }) };
+        }
     }
-
-    let port, writer;
-    let isSyncing = false;
-
-    window.addEventListener('load', () => {
-        generateEQ();
-        initBalancePad();
-    });
 
     document.getElementById('connectBtn').onclick = async function() {
         try {
-            log("Запрос устройства...");
             const device = await navigator.usb.requestDevice({ filters: [] });
             port = new USBSerialDevice(device);
             await port.open();
-            
             document.getElementById('status').innerText = "Connected";
             document.getElementById('status').className = "status ok";
             this.style.display = 'none';
-
             writer = port.writable.getWriter();
-            log("Порт открыт. Отправляю DUMP...");
-            setTimeout(() => sendRaw("DUMP"), 1000);
+            setTimeout(() => sendRaw("DUMP"), 1000); // Запрос данных после подключения [cite: 244, 321]
             readLoop();
-        } catch (e) {
-            log("ОШИБКА: " + e.message);
-        }
+        } catch (e) { log("Error: " + e.message); }
     };
 
     async function readLoop() {
@@ -275,66 +148,59 @@
                 const { value, done } = await reader.read();
                 if (done) break;
                 const text = new TextDecoder().decode(value);
-                log("RX: " + text.trim()); // Видим, что пришло от ESP
-                processIncoming(text);
+                serialBuffer += text;
+                let lines = serialBuffer.split('\n');
+                serialBuffer = lines.pop();
+                for (let line of lines) {
+                    log("RX: " + line.trim());
+                    if (line.trim().startsWith("STATE:")) parseState(line);
+                }
             }
-        } catch (e) {
-            log("Ошибка чтения: " + e.message);
-        }
+        } catch (e) { log("Read Error: " + e.message); }
     }
 
-    async function sendRaw(text) {
-        if (writer) {
-            try {
-                // Добавляем \r\n (ESP32 часто ждет именно эту пару)
-                const data = new TextEncoder().encode(text + "\r\n");
-                await writer.write(data);
-                log("TX: " + text); // Видим, что мы отправляем
-            } catch(e) {
-                log("Ошибка TX: " + e.message);
-            }
-        }
-    }
-
-    // --- Твой старый код processIncoming, parseState и UI остается ниже ---
-    let serialBuffer = "";
-    function processIncoming(text) {
-        serialBuffer += text;
-        let lines = serialBuffer.split('\n');
-        serialBuffer = lines.pop();
-        for (let line of lines) {
-            if (line.startsWith("STATE:")) parseState(line);
-        }
-    }
-
-    // Обновите parseState, чтобы он умел заполнять новые поля при загрузке (DUMP)
+    // Главная функция синхронизации [cite: 257, 258]
     function parseState(line) {
         isSyncing = true;
         try {
             const raw = line.replace("STATE:", "").replace(",END", "").trim();
-            const d = raw.split(",").map(Number);
+            const d = raw.split(","); // d[0]=vol, d[1]=input, d[2]=pre, d[3]=mute... [cite: 298-303]
             
-            // Пример: если d[0] это громкость
+            // Основные параметры
             document.getElementById('volVal').innerText = d[0];
+            document.getElementById('volSlider').value = d[0];
+            setInput(d[1] == 2 ? 'Bluetooth' : 'USB', false);
+            document.getElementById('preSlider').value = d[2];
+            document.getElementById('muteSw').checked = (d[3] == "0");
+
+            // Эквалайзер (Gain 4-10, Q 11-17, Freq 18-20)
+            for (let i = 0; i < 7; i++) {
+                localEqGains[i] = parseInt(d[4 + i]);
+                document.getElementById(`gv${i}`).innerText = (localEqGains[i] > 0 ? "+" : "") + localEqGains[i];
+                document.querySelector(`select[onchange*="eqq${i}"]`).value = d[11 + i];
+            }
+            // Частоты полос 1, 6, 7
+            document.querySelector(`select[onchange*="eqf0"]`).value = d[18];
+            document.querySelector(`select[onchange*="eqf5"]`).value = d[19];
+            document.querySelector(`select[onchange*="eqf6"]`).value = d[20];
+
+            // Настройки Loudness
+            document.getElementById('lByp').checked = (d[31] == "1");
+            document.getElementById('lAttSlider').value = d[32];
+            document.getElementById('lCen').value = d[33];
             
-            // Здесь нужно будет расширить парсинг под ваш формат STATE
-            // Чтобы при получении DUMP кнопки и селекторы встали в нужные позиции
-        } catch(e) {
-            console.error("Parse error", e);
-        }
+            log("Sync Complete ✅");
+        } catch(e) { console.error(e); }
         isSyncing = false;
     }
 
-    async function send(key, val) {
-        if (isSyncing) return;
-        sendRaw(`${key}:${Math.floor(val)}`);
-    }
+    async function sendRaw(text) { if (writer) { await writer.write(new TextEncoder().encode(text + "\r\n")); log("TX: " + text); } }
+    async function send(key, val) { if (!isSyncing) sendRaw(`${key}:${Math.floor(val)}`); }
 
     function openTab(id) {
         document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active');
-        if (window.event && window.event.target) window.event.target.classList.add('active');
     }
 
     function setInput(type, transmit=true) {
@@ -345,90 +211,33 @@
 
     function generateEQ() {
         const container = document.getElementById('eqContainer');
-        if (!container) return;
         container.innerHTML = '';
         for (let i = 0; i < 7; i++) {
             const div = document.createElement('div');
             div.className = 'eq-band';
-            div.innerHTML = `<div style="font-size:0.7rem; margin-bottom:5px;">Band ${i+1}</div>
-                <input type="range" class="eq-slider-vert" id="eqg${i}" min="-15" max="15" value="0" oninput="send('eqg${i}', this.value)">`;
+            let freqHTML = (i===0||i===5||i===6) ? `<select class="freq-toggle" onchange="send('eqf${i}', this.value)">` + 
+                (i===0 ? '<option value="0">62Hz</option><option value="1">100Hz</option>' : 
+                 i===5 ? '<option value="0">4kHz</option><option value="1">6k</option>' : 
+                 '<option value="0">15k</option><option value="1">16k</option>') + '</select>' : '<div style="height:22px"></div>';
+            
+            div.innerHTML = `<div>Band ${i+1}</div>${freqHTML}
+                <button class="btn-step" onclick="changeGain(${i},1)">+</button>
+                <div class="gain-val" id="gv${i}">0</div>
+                <button class="btn-step" onclick="changeGain(${i},-1)">-</button>
+                <select class="q-select" onchange="send('eqq${i}', this.value)">
+                    <option value="0">2.2</option><option value="1" selected>1.8</option><option value="2">1.4</option><option value="3">1.0</option>
+                </select>`;
             container.appendChild(div);
         }
     }
 
-    function generateEQ() {
-    const container = document.getElementById('eqContainer');
-    if (!container) return;
-    container.innerHTML = '';
-
-    for (let i = 0; i < 7; i++) {
-        const div = document.createElement('div');
-        div.className = 'eq-band';
-
-        // Логика выбора частот (eqf)
-        // Для ESP32: ef0 = Band 1, ef1 = Band 6, ef2 = Band 7
-       let freqHTML = '<div style="height:25px"></div>'; 
-        if (i === 0) { // Band 1
-    freqHTML = `<select class="freq-toggle" onchange="send('eqf0', this.value)">
-                            <option value="0">62 Hz</option>
-                            <option value="1">100 Hz</option>
-                        </select>`;
-} else if (i === 5) { // Band 6
-    freqHTML = `<select class="freq-toggle" onchange="send('eqf5', this.value)">
-                            <option value="0">4 kHz</option>
-                            <option value="1">6.34 kHz</option>
-                        </select>`;
-} else if (i === 6) { // Band 7
-    freqHTML = `<select class="freq-toggle" onchange="send('eqf6', this.value)">
-                             <option value="0">15 kHz</option>
-                            <option value="1">16 kHz</option>
-                        </select>`;
-}
-
-        div.innerHTML = `
-            <div style="font-size:0.7rem; font-weight:bold;">Band ${i+1}</div>
-            ${freqHTML}
-            <button class="btn-step" onclick="changeGain(${i}, 1)">+</button>
-            <div class="gain-val" id="gv${i}">0</div>
-            <button class="btn-step" onclick="changeGain(${i}, -1)">-</button>
-            <label style="font-size:0.6rem; margin-top:5px; color:#888;">Q-Factor</label>
-            <select class="q-select" onchange="send('eqq${i}', this.value)">
-                <option value="0">2.2</option>
-                <option value="1" selected>1.8</option>
-                <option value="2">1.4</option>
-                <option value="3">1.0</option>
-            </select>
-        `;
-        container.appendChild(div);
+    function changeGain(idx, delta) {
+        localEqGains[idx] = Math.max(-15, Math.min(15, localEqGains[idx] + delta));
+        document.getElementById(`gv${idx}`).innerText = (localEqGains[idx] > 0 ? "+" : "") + localEqGains[idx];
+        send(`eqg${idx}`, localEqGains[idx]);
     }
-}
 
-// Глобальный массив для хранения усиления (чтобы кнопки корректно инкрементировали)
-let localEqGains = [0, 0, 0, 0, 0, 0, 0];
-
-function changeGain(bandIdx, delta) {
-    let newVal = localEqGains[bandIdx] + delta;
-    if (newVal > 15) newVal = 15;
-    if (newVal < -15) newVal = -15;
-    
-    localEqGains[bandIdx] = newVal;
-    document.getElementById(`gv${bandIdx}`).innerText = (newVal > 0 ? "+" : "") + newVal;
-    
-    // ОТПРАВЛЯЕМ КЛЮЧ "eqg" + индекс (как ждет ESP32)
-    send(`eqg${bandIdx}`, newVal);
-}
-
-    
+    window.onload = generateEQ;
     </script>
-    
-
-    
-<div class="card" style="margin-top: 20px;">
-    <h3>Debug Log</h3>
-    <div id="debugLog" style="height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; background: #000; color: #0f0; padding: 5px; border-radius: 5px;">
-        Waiting for data...
-    </div>
-</div>
-    
 </body>
 </html>
