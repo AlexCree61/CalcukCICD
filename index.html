@@ -368,22 +368,13 @@
         // Логика выбора частот (eqf)
         // Для ESP32: ef0 = Band 1, ef1 = Band 6, ef2 = Band 7
        let freqHTML = '<div style="height:25px"></div>'; 
-        if (i === 0) {
-            freqHTML = `<select class="freq-toggle" onchange="send('eqf0', this.value)">
-                            <option value="0">62 Hz</option>
-                            <option value="1">100 Hz</option>
-                        </select>`;
-        } else if (i === 5) { // Band 6
-            freqHTML = `<select class="freq-toggle" onchange="send('eqf1', this.value)">
-                            <option value="0">4 kHz</option>
-                            <option value="1">6.34 kHz</option>
-                        </select>`;
-        } else if (i === 6) { // Band 7
-            freqHTML = `<select class="freq-toggle" onchange="send('eqf2', this.value)">
-                            <option value="0">15 kHz</option>
-                            <option value="1">16 kHz</option>
-                        </select>`;
-        }
+        if (i === 0) { // Band 1
+    freqHTML = <select class="freq-toggle" onchange="send('eqf0', this.value)">...;
+} else if (i === 5) { // Band 6
+    freqHTML = <select class="freq-toggle" onchange="send('eqf5', this.value)">...;
+} else if (i === 6) { // Band 7
+    freqHTML = <select class="freq-toggle" onchange="send('eqf6', this.value)">...;
+}
 
         div.innerHTML = `
             <div style="font-size:0.7rem; font-weight:bold;">Band ${i+1}</div>
