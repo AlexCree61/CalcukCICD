@@ -26,7 +26,56 @@
         .btn-toggle { background: #333; color: #aaa; padding: 10px 20px; border-radius: 20px; border: 1px solid #444; cursor: pointer; flex: 1; margin: 0 5px; }
         .btn-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
         .eq-scroll { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
-        .eq-band { min-width: 60px; text-align: center; background: #252525; padding: 10px; border-radius: 8px; }
+        .eq-band { 
+        min-width: 85px; 
+        text-align: center; 
+        background: #252525; 
+        padding: 10px; 
+        border-radius: 8px; 
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+        }
+        .btn-step {
+        background: #444;
+        color: white;
+        border: none;
+        width: 100%;
+        padding: 10px 0;
+        border-radius: 5px;
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+    
+    .btn-step:active { background: var(--accent); }
+    
+    .gain-val {
+        font-size: 1.2rem;
+        color: var(--accent);
+        font-weight: bold;
+        min-width: 35px;
+    }
+
+    .freq-toggle {
+        font-size: 0.7rem;
+        background: #333;
+        border: 1px solid #555;
+        color: #ccc;
+        border-radius: 4px;
+        padding: 2px 4px;
+        cursor: pointer;
+        width: 100%;
+    }
+
+    .q-select {
+        font-size: 0.8rem;
+        background: #1a1a1a;
+        color: #00e676;
+        border: 1px solid #444;
+        border-radius: 4px;
+        width: 100%;
+    }
         .eq-slider-vert { writing-mode: bt-lr; -webkit-appearance: slider-vertical; width: 30px; height: 150px; }
         #balCanvas { background: #2b2b2b; border-radius: 10px; margin: 0 auto; display: block; touch-action: none; border: 2px solid #444; }
         #connectBtn { background: var(--accent); color: white; border: none; padding: 8px 15px; border-radius: 5px; font-weight: bold; }
@@ -258,15 +307,21 @@
         }
     }
 
+    // Обновите parseState, чтобы он умел заполнять новые поля при загрузке (DUMP)
     function parseState(line) {
         isSyncing = true;
         try {
             const raw = line.replace("STATE:", "").replace(",END", "").trim();
             const d = raw.split(",").map(Number);
+            
+            // Пример: если d[0] это громкость
             document.getElementById('volVal').innerText = d[0];
-            const slider = document.querySelector('input[oninput*="voll"]');
-            if (slider) slider.value = d[0];
-        } catch(e) {}
+            
+            // Здесь нужно будет расширить парсинг под ваш формат STATE
+            // Чтобы при получении DUMP кнопки и селекторы встали в нужные позиции
+        } catch(e) {
+            console.error("Parse error", e);
+        }
         isSyncing = false;
     }
 
@@ -301,14 +356,67 @@
         }
     }
 
-    function initBalancePad() {
-        const canvas = document.getElementById('balCanvas');
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0,0,300,300);
-        ctx.strokeStyle = '#555';
-        ctx.strokeRect(150,0,0,300); ctx.strokeRect(0,150,300,0);
+    function generateEQ() {
+        const container = document.getElementById('eqContainer');
+        if (!container) return;
+        container.innerHTML = '';
+
+        for (let i = 0; i < 7; i++) {
+            const div = document.createElement('div');
+            div.className = 'eq-band';
+
+            // 1. Переключатель частоты (только для 1, 6 и 7 полос)
+            let freqHTML = '<div style="height:25px"></div>'; // Заглушка для отступа
+            if (i === 0) { // Band 1
+                freqHTML = `<select class="freq-toggle" onchange="send('ef0', this.value)">
+                                <option value="0">62 Hz</option>
+                                <option value="1">100 Hz</option>
+                            </select>`;
+            } else if (i === 5) { // Band 6
+                freqHTML = `<select class="freq-toggle" onchange="send('ef1', this.value)">
+                                <option value="0">4 kHz</option>
+                                <option value="1">6.34 kHz</option>
+                            </select>`;
+            } else if (i === 6) { // Band 7
+                freqHTML = `<select class="freq-toggle" onchange="send('ef2', this.value)">
+                                <option value="0">15 kHz</option>
+                                <option value="1">16 kHz</option>
+                            </select>`;
+            }
+
+            div.innerHTML = `
+                <div style="font-size:0.7rem;">Band ${i+1}</div>
+                ${freqHTML}
+                <button class="btn-step" onclick="changeGain(${i}, 1)">+</button>
+                <div class="gain-val" id="gv${i}">0</div>
+                <button class="btn-step" onclick="changeGain(${i}, -1)">-</button>
+                <label style="font-size:0.6rem; margin:0;">Q-Factor</label>
+                <select class="q-select" onchange="send('eq${i}', this.value)">
+                    <option value="0">2.2</option>
+                    <option value="1" selected>1.8</option>
+                    <option value="2">1.4</option>
+                    <option value="3">1.0</option>
+                </select>
+            `;
+            container.appendChild(div);
+        }
     }
+        // Хранилище для значений Gain полос (чтобы кнопки работали локально)
+    let eqGains = [0, 0, 0, 0, 0, 0, 0];
+
+    function changeGain(bandIdx, delta) {
+        let newVal = eqGains[bandIdx] + delta;
+        if (newVal > 15) newVal = 15;
+        if (newVal < -15) newVal = -15;
+        
+        eqGains[bandIdx] = newVal;
+        document.getElementById(`gv${bandIdx}`).innerText = (newVal > 0 ? "+" : "") + newVal;
+        
+        // Отправка команды eg0, eg1 ... eg6 согласно логике ESP32
+        send(`eg${bandIdx}`, newVal);
+    }
+
+    
     </script>
     
 
