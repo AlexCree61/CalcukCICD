@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>TDA7416 Control</title>
+    <title>TDA7416 Control Full</title>
     <style>
         :root { --bg: #121212; --card: #1e1e1e; --accent: #007bff; --text: #fff; --text-sec: #888; }
         body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 0; user-select: none; }
@@ -22,22 +22,22 @@
         .btn-toggle { background: #333; color: #aaa; padding: 10px 20px; border-radius: 20px; border: 1px solid #444; cursor: pointer; flex: 1; margin: 0 5px; }
         .btn-toggle.active { background: var(--accent); color: white; border-color: var(--accent); }
         .eq-scroll { display: flex; overflow-x: auto; gap: 10px; padding-bottom: 10px; }
-        .eq-band { min-width: 85px; text-align: center; background: #252525; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
+        .eq-band { min-width: 90px; text-align: center; background: #252525; padding: 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 8px; }
         .gain-val { font-size: 1.2rem; color: var(--accent); font-weight: bold; }
-        .btn-step { background: #444; color: white; border: none; padding: 10px 0; border-radius: 5px; font-weight: bold; }
-        .q-select, .freq-toggle, select { background: #333; color: white; border: 1px solid #444; padding: 5px; border-radius: 4px; width: 100%; }
+        .btn-step { background: #444; color: white; border: none; padding: 10px 0; border-radius: 5px; font-weight: bold; cursor: pointer; }
+        .q-select, .freq-toggle, select { background: #333; color: #00e676; border: 1px solid #444; padding: 5px; border-radius: 4px; width: 100%; }
     </style>
 </head>
 <body>
     <div class="header">
         <div id="status" class="status">Disconnected</div>
-        <button id="connectBtn" style="background: var(--accent); color: white; border: none; padding: 8px 15px; border-radius: 5px;">Connect</button>
+        <button id="connectBtn" style="background:var(--accent); color:white; border:none; padding:8px 15px; border-radius:5px;">Connect</button>
     </div>
 
     <div class="tabs">
         <button class="tab-btn active" onclick="openTab('main')">Main</button>
         <button class="tab-btn" onclick="openTab('eq')">EQ</button>
-        <button class="tab-btn" onclick="openTab('bal')">Settings</button>
+        <button class="tab-btn" onclick="openTab('adv')">Advanced</button>
     </div>
 
     <div id="main" class="content active">
@@ -54,12 +54,8 @@
             </div>
         </div>
         <div class="card">
-            <h3>Preamp Gain</h3>
-            <input type="range" id="preSlider" min="0" max="15" value="0" oninput="send('pre', this.value)">
-        </div>
-        <div class="card">
             <div class="row">
-                <h3>Sound State</h3>
+                <h3>Mute</h3>
                 <input type="checkbox" id="muteSw" onchange="send('mute', this.checked ? 0 : 1)" checked>
             </div>
         </div>
@@ -67,27 +63,25 @@
 
     <div id="eq" class="content">
         <div class="eq-scroll" id="eqContainer"></div>
+        <div class="card">
+            <h3>Subwoofer</h3>
+            <div class="row"><label>Freq</label><select id="s_fr" onchange="send('s_fr', this.value)"><option value="0">Off</option><option value="1">90Hz</option><option value="2">135Hz</option><option value="3">180Hz</option></select></div>
+            <div class="row"><label>HP Filter</label><input type="checkbox" id="s_hp" onchange="send('s_hp', this.checked?1:0)"></div>
+            <label>Sub Gain</label><input type="range" id="s_att" min="-79" max="15" value="0" oninput="send('s_att', this.value)">
+        </div>
     </div>
 
-    <div id="bal" class="content">
-        <div class="card">
-            <h3>Subwoofer Gain</h3>
-            <input type="range" id="subAttSlider" min="-79" max="15" value="0" oninput="send('s_att', this.value)">
-        </div>
+    <div id="adv" class="content">
         <div class="card">
             <h3>Loudness</h3>
-            <div class="row"><label>Enable</label><input type="checkbox" id="lByp" onchange="send('l_byp', this.checked?1:0)"></div>
-            <label>Attenuation</label><input type="range" id="lAttSlider" min="0" max="19" value="19" oninput="send('l_att', this.value)">
-            <label>Center Freq</label>
-            <select onchange="send('l_cen', this.value)" id="lCen">
-                <option value="0">200Hz</option><option value="1">400Hz</option><option value="2">600Hz</option><option value="3">800Hz</option>
-            </select>
+            <div class="row"><label>Bypass</label><input type="checkbox" id="l_byp" onchange="send('l_byp', this.checked?1:0)"></div>
+            <label>Attenuation</label><input type="range" id="l_att" min="0" max="19" value="19" oninput="send('l_att', this.value)">
         </div>
     </div>
 
     <div class="card" style="margin: 20px;">
         <h3>Debug Log</h3>
-        <div id="debugLog" style="height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; background: #000; color: #0f0; padding: 5px;">Waiting...</div>
+        <div id="debugLog" style="height: 100px; overflow-y: auto; font-family: monospace; font-size: 0.7rem; background: #000; color: #0f0; padding: 5px;">Ready...</div>
     </div>
 
     <script>
@@ -100,24 +94,22 @@
         if(div) { div.innerHTML += "<div>" + msg + "</div>"; div.scrollTop = div.scrollHeight; }
     }
 
-    // Класс для работы с USB Serial (CP2102) [cite: 227-240]
     class USBSerialDevice {
-        constructor(device) { this.device = device; this.interface = 0; }
+        constructor(device) { this.device = device; }
         async open() {
             await this.device.open();
-            await this.device.selectConfiguration(1);
+            if (this.device.configuration === null) await this.device.selectConfiguration(1);
             const iface = this.device.configuration.interfaces[0];
-            this.interface = iface.interfaceNumber;
-            await this.device.claimInterface(this.interface);
+            await this.device.claimInterface(iface.interfaceNumber);
             const endpoints = iface.alternates[0].endpoints;
             this.epIn = endpoints.find(e => e.direction === 'in').endpointNumber;
             this.epOut = endpoints.find(e => e.direction === 'out').endpointNumber;
             
-            // Настройка CP2102 [cite: 231-236]
-            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x00, value:0x0001, index:this.interface});
+            // CP2102 Setup [cite: 53-58]
+            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x00, value:1, index:iface.interfaceNumber});
             const baudData = new Uint8Array([0x00, 0xC2, 0x01, 0x00]); // 115200
-            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x1E, value:0, index:this.interface}, baudData);
-            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x07, value:0x0303, index:this.interface});
+            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x1E, value:0, index:iface.interfaceNumber}, baudData);
+            await this.device.controlTransferOut({requestType:'vendor', recipient:'interface', request:0x07, value:0x0303, index:iface.interfaceNumber});
             
             this.readable = { getReader: () => ({ read: async () => { 
                 const result = await this.device.transferIn(this.epIn, 64);
@@ -136,66 +128,58 @@
             document.getElementById('status').className = "status ok";
             this.style.display = 'none';
             writer = port.writable.getWriter();
-            setTimeout(() => sendRaw("DUMP"), 1000); // Запрос данных после подключения [cite: 244, 321]
+            setTimeout(() => sendRaw("DUMP"), 1000);
             readLoop();
         } catch (e) { log("Error: " + e.message); }
     };
 
     async function readLoop() {
         const reader = port.readable.getReader();
-        try {
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                const text = new TextDecoder().decode(value);
-                serialBuffer += text;
-                let lines = serialBuffer.split('\n');
-                serialBuffer = lines.pop();
-                for (let line of lines) {
-                    log("RX: " + line.trim());
-                    if (line.trim().startsWith("STATE:")) parseState(line);
-                }
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            serialBuffer += new TextDecoder().decode(value);
+            let lines = serialBuffer.split('\n');
+            serialBuffer = lines.pop();
+            for (let line of lines) {
+                if (line.includes("STATE:")) parseState(line);
+                log("RX: " + line.trim());
             }
-        } catch (e) { log("Read Error: " + e.message); }
+        }
     }
 
-    // Главная функция синхронизации [cite: 257, 258]
     function parseState(line) {
         isSyncing = true;
         try {
             const raw = line.replace("STATE:", "").replace(",END", "").trim();
-            const d = raw.split(","); // d[0]=vol, d[1]=input, d[2]=pre, d[3]=mute... [cite: 298-303]
+            const d = raw.split(",");
             
-            // Основные параметры
+            // Sync UI 
             document.getElementById('volVal').innerText = d[0];
             document.getElementById('volSlider').value = d[0];
             setInput(d[1] == 2 ? 'Bluetooth' : 'USB', false);
-            document.getElementById('preSlider').value = d[2];
             document.getElementById('muteSw').checked = (d[3] == "0");
 
-            // Эквалайзер (Gain 4-10, Q 11-17, Freq 18-20)
-            for (let i = 0; i < 7; i++) {
-                localEqGains[i] = parseInt(d[4 + i]);
+            for(let i=0; i<7; i++) {
+                localEqGains[i] = parseInt(d[4+i]);
                 document.getElementById(`gv${i}`).innerText = (localEqGains[i] > 0 ? "+" : "") + localEqGains[i];
-                document.querySelector(`select[onchange*="eqq${i}"]`).value = d[11 + i];
+                document.getElementById(`eqq${i}`).value = d[11+i];
             }
-            // Частоты полос 1, 6, 7
-            document.querySelector(`select[onchange*="eqf0"]`).value = d[18];
-            document.querySelector(`select[onchange*="eqf5"]`).value = d[19];
-            document.querySelector(`select[onchange*="eqf6"]`).value = d[20];
+            if(document.getElementById('eqf0')) document.getElementById('eqf0').value = d[18];
+            if(document.getElementById('eqf5')) document.getElementById('eqf5').value = d[19];
+            if(document.getElementById('eqf6')) document.getElementById('eqf6').value = d[20];
 
-            // Настройки Loudness
-            document.getElementById('lByp').checked = (d[31] == "1");
-            document.getElementById('lAttSlider').value = d[32];
-            document.getElementById('lCen').value = d[33];
-            
-            log("Sync Complete ✅");
+            document.getElementById('s_fr').value = d[21];
+            document.getElementById('s_hp').checked = (d[23] == "1");
+            document.getElementById('s_att').value = d[30];
+            document.getElementById('l_byp').checked = (d[31] == "1");
+            document.getElementById('l_att').value = d[32];
         } catch(e) { console.error(e); }
         isSyncing = false;
     }
 
-    async function sendRaw(text) { if (writer) { await writer.write(new TextEncoder().encode(text + "\r\n")); log("TX: " + text); } }
-    async function send(key, val) { if (!isSyncing) sendRaw(`${key}:${Math.floor(val)}`); }
+    async function sendRaw(text) { if (writer) await writer.write(new TextEncoder().encode(text + "\r\n")); }
+    async function send(key, val) { if (!isSyncing) sendRaw(key + ":" + Math.floor(val)); }
 
     function openTab(id) {
         document.querySelectorAll('.content').forEach(c => c.classList.remove('active'));
@@ -204,8 +188,8 @@
     }
 
     function setInput(type, transmit=true) {
-        document.getElementById('btnSrcBT').className = `btn-toggle ${type==='Bluetooth'?'active':''}`;
-        document.getElementById('btnSrcUSB').className = `btn-toggle ${type==='USB'?'active':''}`;
+        document.getElementById('btnSrcBT').className = "btn-toggle " + (type==='Bluetooth'?'active':'');
+        document.getElementById('btnSrcUSB').className = "btn-toggle " + (type==='USB'?'active':'');
         if (transmit) send('ins', type === 'Bluetooth' ? 2 : 0);
     }
 
@@ -215,28 +199,26 @@
         for (let i = 0; i < 7; i++) {
             const div = document.createElement('div');
             div.className = 'eq-band';
-            let freqHTML = (i===0||i===5||i===6) ? `<select class="freq-toggle" onchange="send('eqf${i}', this.value)">` + 
-                (i===0 ? '<option value="0">62Hz</option><option value="1">100Hz</option>' : 
-                 i===5 ? '<option value="0">4kHz</option><option value="1">6k</option>' : 
-                 '<option value="0">15k</option><option value="1">16k</option>') + '</select>' : '<div style="height:22px"></div>';
+            let fHTML = (i===0||i===5||i===6) ? `<select id="eqf${i}" class="freq-toggle" onchange="send('eqf${i}', this.value)">` + 
+                (i===0?'<option value="0">62Hz</option><option value="1">100Hz</option>':
+                 i===5?'<option value="0">4kHz</option><option value="1">6.3kHz</option>':
+                 '<option value="0">15kHz</option><option value="1">16kHz</option>') + '</select>' : '<div style="height:25px"></div>';
             
-            div.innerHTML = `<div>Band ${i+1}</div>${freqHTML}
+            div.innerHTML = `<div>Band ${i+1}</div>${fHTML}
                 <button class="btn-step" onclick="changeGain(${i},1)">+</button>
                 <div class="gain-val" id="gv${i}">0</div>
                 <button class="btn-step" onclick="changeGain(${i},-1)">-</button>
-                <select class="q-select" onchange="send('eqq${i}', this.value)">
+                <select id="eqq${i}" class="q-select" onchange="send('eqq${i}', this.value)">
                     <option value="0">2.2</option><option value="1" selected>1.8</option><option value="2">1.4</option><option value="3">1.0</option>
                 </select>`;
             container.appendChild(div);
         }
     }
-
-    function changeGain(idx, delta) {
-        localEqGains[idx] = Math.max(-15, Math.min(15, localEqGains[idx] + delta));
-        document.getElementById(`gv${idx}`).innerText = (localEqGains[idx] > 0 ? "+" : "") + localEqGains[idx];
-        send(`eqg${idx}`, localEqGains[idx]);
+    function changeGain(i, d) {
+        localEqGains[i] = Math.max(-15, Math.min(15, localEqGains[i] + d));
+        document.getElementById(`gv${i}`).innerText = (localEqGains[i]>0?"+":"")+localEqGains[i];
+        send(`eqg${i}`, localEqGains[i]);
     }
-
     window.onload = generateEQ;
     </script>
 </body>
