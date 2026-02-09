@@ -357,64 +357,66 @@
     }
 
     function generateEQ() {
-        const container = document.getElementById('eqContainer');
-        if (!container) return;
-        container.innerHTML = '';
+    const container = document.getElementById('eqContainer');
+    if (!container) return;
+    container.innerHTML = '';
 
-        for (let i = 0; i < 7; i++) {
-            const div = document.createElement('div');
-            div.className = 'eq-band';
+    for (let i = 0; i < 7; i++) {
+        const div = document.createElement('div');
+        div.className = 'eq-band';
 
-            // 1. Переключатель частоты (только для 1, 6 и 7 полос)
-            let freqHTML = '<div style="height:25px"></div>'; // Заглушка для отступа
-            if (i === 0) { // Band 1
-                freqHTML = `<select class="freq-toggle" onchange="send('ef0', this.value)">
-                                <option value="0">62 Hz</option>
-                                <option value="1">100 Hz</option>
-                            </select>`;
-            } else if (i === 5) { // Band 6
-                freqHTML = `<select class="freq-toggle" onchange="send('ef1', this.value)">
-                                <option value="0">4 kHz</option>
-                                <option value="1">6.34 kHz</option>
-                            </select>`;
-            } else if (i === 6) { // Band 7
-                freqHTML = `<select class="freq-toggle" onchange="send('ef2', this.value)">
-                                <option value="0">15 kHz</option>
-                                <option value="1">16 kHz</option>
-                            </select>`;
-            }
-
-            div.innerHTML = `
-                <div style="font-size:0.7rem;">Band ${i+1}</div>
-                ${freqHTML}
-                <button class="btn-step" onclick="changeGain(${i}, 1)">+</button>
-                <div class="gain-val" id="gv${i}">0</div>
-                <button class="btn-step" onclick="changeGain(${i}, -1)">-</button>
-                <label style="font-size:0.6rem; margin:0;">Q-Factor</label>
-                <select class="q-select" onchange="send('eq${i}', this.value)">
-                    <option value="0">2.2</option>
-                    <option value="1" selected>1.8</option>
-                    <option value="2">1.4</option>
-                    <option value="3">1.0</option>
-                </select>
-            `;
-            container.appendChild(div);
+        // Переключатели частот для Band 1 (index 0), Band 6 (index 1), Band 7 (index 2)
+        // ВАЖНО: В вашем коде ESP: state.eq_f[i] управляется ключом "eqf" + i
+        let freqHTML = '<div style="height:25px"></div>'; 
+        if (i === 0) { // Band 1
+            freqHTML = `<select class="freq-toggle" onchange="send('eqf0', this.value)">
+                            <option value="0">62 Hz</option>
+                            <option value="1">100 Hz</option>
+                        </select>`;
+        } else if (i === 5) { // Band 6
+            freqHTML = `<select class="freq-toggle" onchange="send('eqf1', this.value)">
+                            <option value="0">4 kHz</option>
+                            <option value="1">6.34 kHz</option>
+                        </select>`;
+        } else if (i === 6) { // Band 7
+            freqHTML = `<select class="freq-toggle" onchange="send('eqf2', this.value)">
+                            <option value="0">15 kHz</option>
+                            <option value="1">16 kHz</option>
+                        </select>`;
         }
-    }
-        // Хранилище для значений Gain полос (чтобы кнопки работали локально)
-    let eqGains = [0, 0, 0, 0, 0, 0, 0];
 
-    function changeGain(bandIdx, delta) {
-        let newVal = eqGains[bandIdx] + delta;
-        if (newVal > 15) newVal = 15;
-        if (newVal < -15) newVal = -15;
-        
-        eqGains[bandIdx] = newVal;
-        document.getElementById(`gv${bandIdx}`).innerText = (newVal > 0 ? "+" : "") + newVal;
-        
-        // Отправка команды eg0, eg1 ... eg6 согласно логике ESP32
-        send(`eg${bandIdx}`, newVal);
+        div.innerHTML = `
+            <div style="font-size:0.7rem; font-weight:bold;">Band ${i+1}</div>
+            ${freqHTML}
+            <button class="btn-step" onclick="changeGain(${i}, 1)">+</button>
+            <div class="gain-val" id="gv${i}">0</div>
+            <button class="btn-step" onclick="changeGain(${i}, -1)">-</button>
+            <label style="font-size:0.6rem; margin-top:5px; color:#888;">Q-Factor</label>
+            <select class="q-select" onchange="send('eqq${i}', this.value)">
+                <option value="0">2.2</option>
+                <option value="1">1.8</option>
+                <option value="2">1.4</option>
+                <option value="3">1.0</option>
+            </select>
+        `;
+        container.appendChild(div);
     }
+}
+
+// Глобальный массив для хранения усиления (чтобы кнопки корректно инкрементировали)
+let localEqGains = [0, 0, 0, 0, 0, 0, 0];
+
+function changeGain(bandIdx, delta) {
+    let newVal = localEqGains[bandIdx] + delta;
+    if (newVal > 15) newVal = 15;
+    if (newVal < -15) newVal = -15;
+    
+    localEqGains[bandIdx] = newVal;
+    document.getElementById(`gv${bandIdx}`).innerText = (newVal > 0 ? "+" : "") + newVal;
+    
+    // ОТПРАВЛЯЕМ КЛЮЧ "eqg" + индекс (как ждет ESP32)
+    send(`eqg${bandIdx}`, newVal);
+}
 
     
     </script>
