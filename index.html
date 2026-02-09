@@ -365,10 +365,10 @@
         const div = document.createElement('div');
         div.className = 'eq-band';
 
-        // Переключатели частот для Band 1 (index 0), Band 6 (index 1), Band 7 (index 2)
-        // ВАЖНО: В вашем коде ESP: state.eq_f[i] управляется ключом "eqf" + i
+        // Логика выбора частот (eqf)
+        // Для ESP32: ef0 = Band 1, ef1 = Band 6, ef2 = Band 7
         let freqHTML = '<div style="height:25px"></div>'; 
-        if (i === 0) { // Band 1
+        if (i === 0) {
             freqHTML = `<select class="freq-toggle" onchange="send('eqf0', this.value)">
                             <option value="0">62 Hz</option>
                             <option value="1">100 Hz</option>
@@ -394,7 +394,7 @@
             <label style="font-size:0.6rem; margin-top:5px; color:#888;">Q-Factor</label>
             <select class="q-select" onchange="send('eqq${i}', this.value)">
                 <option value="0">2.2</option>
-                <option value="1">1.8</option>
+                <option value="1" selected>1.8</option>
                 <option value="2">1.4</option>
                 <option value="3">1.0</option>
             </select>
