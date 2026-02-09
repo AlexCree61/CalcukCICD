@@ -369,11 +369,11 @@
         // Для ESP32: ef0 = Band 1, ef1 = Band 6, ef2 = Band 7
        let freqHTML = '<div style="height:25px"></div>'; 
         if (i === 0) { // Band 1
-    freqHTML = <select class="freq-toggle" onchange="send('eqf0', this.value)">...;
+    freqHTML = `<select class="freq-toggle" onchange="send('eqf0', this.value)">...`;
 } else if (i === 5) { // Band 6
-    freqHTML = <select class="freq-toggle" onchange="send('eqf5', this.value)">...;
+    freqHTML = `<select class="freq-toggle" onchange="send('eqf5', this.value)">...`;
 } else if (i === 6) { // Band 7
-    freqHTML = <select class="freq-toggle" onchange="send('eqf6', this.value)">...;
+    freqHTML = `<select class="freq-toggle" onchange="send('eqf6', this.value)">...`;
 }
 
         div.innerHTML = `
